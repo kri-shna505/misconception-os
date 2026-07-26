@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.health_routes import router as health_router
+from app.api.routes.problem_routes import router as problem_router
+from app.api.routes.student_routes import router as student_router
 
 app = FastAPI(
     title="MisconceptionOS API",
@@ -17,3 +19,5 @@ app.add_middleware(
 )
 
 app.include_router(health_router, prefix="/api")
+app.include_router(student_router, prefix="/api")
+app.include_router(problem_router, prefix="/api")
