@@ -1,14 +1,25 @@
-import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { useMemo, useState } from "react";
 
 import { submitAttempt } from "../services/attemptApi";
 import type { AttemptResponse } from "../services/attemptApi";
+
+import { createDiagnosisFromAttempt } from "../services/diagnosisApi";
+import type { DiagnosisResponse } from "../types/diagnosis";
 
 type AttemptSubmissionFormProps = {
   studentAliasId: string;
   problemId: string;
   problemTitle: string;
 };
+
+function formatConfidence(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatState(value: string) {
+  return value.replaceAll("_", " ");
+}
 
 export default function AttemptSubmissionForm({
   studentAliasId,
@@ -21,11 +32,15 @@ export default function AttemptSubmissionForm({
   const [speechTranscript, setSpeechTranscript] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState("python");
 
-  const [startedAt] = useState(() => Date.now());
+  const [startedAt, setStartedAt] = useState(() => Date.now());
   const [submitting, setSubmitting] = useState(false);
   const [submittedAttempt, setSubmittedAttempt] =
     useState<AttemptResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [diagnosis, setDiagnosis] = useState<DiagnosisResponse | null>(null);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnosisError, setDiagnosisError] = useState<string | null>(null);
 
   const responseTimeSeconds = useMemo(() => {
     return Math.max(1, Math.round((Date.now() - startedAt) / 1000));
@@ -43,6 +58,8 @@ export default function AttemptSubmissionForm({
 
     setError(null);
     setSubmittedAttempt(null);
+    setDiagnosis(null);
+    setDiagnosisError(null);
 
     if (!canSubmit) {
       setError(
@@ -77,14 +94,45 @@ export default function AttemptSubmissionForm({
     }
   }
 
+  async function handleGenerateDiagnosis() {
+    if (!submittedAttempt) {
+      return;
+    }
+
+    setDiagnosisError(null);
+
+    try {
+      setDiagnosing(true);
+      const result = await createDiagnosisFromAttempt(submittedAttempt.id);
+      setDiagnosis(result);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Diagnosis generation failed.";
+      setDiagnosisError(message);
+    } finally {
+      setDiagnosing(false);
+    }
+  }
+
+  function handleSubmitAnotherAttempt() {
+    setSubmittedAttempt(null);
+    setDiagnosis(null);
+    setDiagnosisError(null);
+    setFinalAnswer("");
+    setWrittenReasoning("");
+    setSourceCode("");
+    setSpeechTranscript("");
+    setStartedAt(Date.now());
+  }
+
   if (submittedAttempt) {
     return (
       <section className="attempt-card attempt-success-card">
         <p className="section-kicker">Attempt saved</p>
         <h2>Your submission was recorded.</h2>
         <p>
-          This attempt is now stored for diagnosis. The next sprint will connect
-          this saved attempt to the misconception diagnosis engine.
+          This attempt is stored separately from diagnosis. Generate a diagnosis
+          only when you are ready to inspect the misconception evidence.
         </p>
 
         <div className="attempt-result-grid">
@@ -108,19 +156,105 @@ export default function AttemptSubmissionForm({
           </div>
         </div>
 
-        <button
-          className="primary-button"
-          type="button"
-          onClick={() => {
-            setSubmittedAttempt(null);
-            setFinalAnswer("");
-            setWrittenReasoning("");
-            setSourceCode("");
-            setSpeechTranscript("");
-          }}
-        >
-          Submit another attempt
-        </button>
+        <div className="attempt-actions">
+          <button
+            className="primary-button"
+            type="button"
+            onClick={handleGenerateDiagnosis}
+            disabled={diagnosing}
+          >
+            {diagnosing ? "Generating diagnosis..." : "Generate diagnosis"}
+          </button>
+
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={handleSubmitAnotherAttempt}
+          >
+            Submit another attempt
+          </button>
+        </div>
+
+        {diagnosisError && (
+          <div className="attempt-error">{diagnosisError}</div>
+        )}
+
+        {diagnosis && (
+          <section className="diagnosis-card">
+            <div className="diagnosis-card-header">
+              <div>
+                <p className="section-kicker">Diagnosis result</p>
+                <h2>
+                  {diagnosis.primary_misconception
+                    ? diagnosis.primary_misconception.name
+                    : "No confident misconception detected"}
+                </h2>
+              </div>
+
+              <div className="diagnosis-confidence">
+                <span>{formatConfidence(diagnosis.confidence)}</span>
+                <small>confidence</small>
+              </div>
+            </div>
+
+            <div className="diagnosis-meta-grid">
+              <div>
+                <span>State</span>
+                <strong>{formatState(diagnosis.state)}</strong>
+              </div>
+              <div>
+                <span>Misconception code</span>
+                <strong>{diagnosis.primary_misconception?.code ?? "—"}</strong>
+              </div>
+              <div>
+                <span>Topic</span>
+                <strong>{diagnosis.primary_misconception?.topic ?? "—"}</strong>
+              </div>
+              <div>
+                <span>Model version</span>
+                <strong>{diagnosis.model_version}</strong>
+              </div>
+            </div>
+
+            <div className="diagnosis-section">
+              <h3>Observable evidence</h3>
+              {diagnosis.evidence.length > 0 ? (
+                <ul className="diagnosis-evidence-list">
+                  {diagnosis.evidence.map((item) => (
+                    <li key={item.id}>
+                      <span>{item.source}</span>
+                      <p>{item.text}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No evidence was returned for this diagnosis.</p>
+              )}
+            </div>
+
+            {diagnosis.alternatives.length > 0 && (
+              <div className="diagnosis-section">
+                <h3>Alternative possibilities</h3>
+                <ul className="diagnosis-alternative-list">
+                  {diagnosis.alternatives.map((item) => (
+                    <li key={item.id}>
+                      <strong>{item.misconception.code}</strong>{" "}
+                      {item.misconception.name} —{" "}
+                      {formatConfidence(item.confidence)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="diagnosis-next-action">
+              <span>Next action</span>
+              <strong>{formatState(diagnosis.next_action)}</strong>
+            </div>
+
+            <p className="diagnosis-note">{diagnosis.decision_reason}</p>
+          </section>
+        )}
       </section>
     );
   }
@@ -211,8 +345,8 @@ export default function AttemptSubmissionForm({
           </button>
 
           <p>
-            This only saves the attempt. Diagnosis will be generated in the next
-            sprint.
+            This only saves the attempt. Diagnosis is generated separately after
+            submission.
           </p>
         </div>
       </form>
