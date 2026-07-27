@@ -7,7 +7,7 @@ export function LandingPage({ onStartStudent }: LandingPageProps) {
     <main className="landing-shell">
       <nav className="landing-nav">
         <div className="brand-lockup">
-          <div className="brand-mark">M</div>
+          <div className="brand-mark">M/OS</div>
           <div>
             <strong>MisconceptionOS</strong>
             <span>DSA Misconception Diagnosis Platform</span>
