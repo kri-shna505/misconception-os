@@ -17,20 +17,36 @@ function App() {
   useEffect(() => {
     const storedSession = localStorage.getItem("studentSession");
 
-    if (storedSession) {
-      setSession(JSON.parse(storedSession) as StudentSessionResponse);
+    if (!storedSession) {
+      return;
+    }
+
+    try {
+      const parsedSession = JSON.parse(storedSession) as StudentSessionResponse;
+      setSession(parsedSession);
       setView("problem-bank");
+    } catch {
+      localStorage.removeItem("studentSession");
+      setSession(null);
+      setSelectedProblemId(null);
+      setView("landing");
     }
   }, []);
 
   function handleSessionCreated(newSession: StudentSessionResponse) {
     setSession(newSession);
+    setSelectedProblemId(null);
     setView("problem-bank");
   }
 
   function handleProblemSelected(problemId: string) {
     setSelectedProblemId(problemId);
     setView("problem-detail");
+  }
+
+  function handleBackToProblemBank() {
+    setSelectedProblemId(null);
+    setView("problem-bank");
   }
 
   function handleResetSession() {
@@ -48,11 +64,21 @@ function App() {
     return <StudentSessionPage onSessionCreated={handleSessionCreated} />;
   }
 
-  if (view === "problem-detail" && selectedProblemId) {
+  if (view === "problem-detail") {
+    if (!session) {
+      return <LandingPage onStartStudent={() => setView("student-session")} />;
+    }
+
+    if (!selectedProblemId) {
+      setView("problem-bank");
+      return null;
+    }
+
     return (
       <ProblemDetailPage
         problemId={selectedProblemId}
-        onBack={() => setView("problem-bank")}
+        session={session}
+        onBack={handleBackToProblemBank}
       />
     );
   }
