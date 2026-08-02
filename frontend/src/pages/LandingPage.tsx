@@ -1,13 +1,18 @@
 interface LandingPageProps {
   onStartStudent: () => void;
+  onStartTeacher: () => void;
 }
 
-export function LandingPage({ onStartStudent }: LandingPageProps) {
+export function LandingPage({
+  onStartStudent,
+  onStartTeacher,
+}: LandingPageProps) {
   return (
     <main className="landing-shell">
       <nav className="landing-nav">
         <div className="brand-lockup">
           <div className="brand-mark">M/OS</div>
+
           <div>
             <strong>MisconceptionOS</strong>
             <span>DSA Misconception Diagnosis Platform</span>
@@ -15,10 +20,17 @@ export function LandingPage({ onStartStudent }: LandingPageProps) {
         </div>
 
         <div className="nav-actions">
-          <button className="nav-button muted-button" disabled>
-            Teacher Console — Later
+          <button
+            className="nav-button muted-button"
+            onClick={onStartTeacher}
+          >
+            Open Teacher Console
           </button>
-          <button className="nav-button" onClick={onStartStudent}>
+
+          <button
+            className="nav-button"
+            onClick={onStartStudent}
+          >
             Start Student Session
           </button>
         </div>
@@ -45,11 +57,18 @@ export function LandingPage({ onStartStudent }: LandingPageProps) {
           </div>
 
           <div className="hero-actions">
-            <button className="primary-button" onClick={onStartStudent}>
+            <button
+              className="primary-button"
+              onClick={onStartStudent}
+            >
               Start as Student
             </button>
-            <button className="ghost-button" disabled>
-              Teacher Dashboard — Coming Soon
+
+            <button
+              className="ghost-button"
+              onClick={onStartTeacher}
+            >
+              Open Teacher Dashboard
             </button>
           </div>
         </div>
@@ -57,6 +76,7 @@ export function LandingPage({ onStartStudent }: LandingPageProps) {
         <div className="human-diagnosis-board">
           <div className="teacher-note">
             <span className="note-label">Student attempt</span>
+
             <p>
               “I used binary search because it is O(log n), but the array is
               [4, 1, 7, 3, 9].”
@@ -87,9 +107,11 @@ export function LandingPage({ onStartStudent }: LandingPageProps) {
             <div className="diagnosis-summary">
               <small>Likely misconception</small>
               <strong>Binary Search on Unsorted Data</strong>
+
               <div className="confidence-bar">
                 <span />
               </div>
+
               <em>Evidence-backed confidence: 92%</em>
             </div>
           </div>
@@ -99,7 +121,9 @@ export function LandingPage({ onStartStudent }: LandingPageProps) {
       <section className="human-proof-grid">
         <article className="proof-card">
           <span>Student</span>
+
           <h3>Wrong answer becomes a learning signal.</h3>
+
           <p>
             The system looks at reasoning and code to understand the
             misconception, not to simply mark the answer wrong.
@@ -108,7 +132,9 @@ export function LandingPage({ onStartStudent }: LandingPageProps) {
 
         <article className="proof-card">
           <span>Teacher</span>
+
           <h3>Classroom patterns become visible.</h3>
+
           <p>
             Repeated misconceptions can be reviewed through anonymized attempts,
             labels, and dashboard trends.
@@ -117,7 +143,9 @@ export function LandingPage({ onStartStudent }: LandingPageProps) {
 
         <article className="proof-card">
           <span>Research</span>
+
           <h3>Every diagnosis stays evidence-backed.</h3>
+
           <p>
             Confidence, refusal, diagnostic questions, and teacher review make
             the system safer than a random chatbot.
@@ -128,7 +156,9 @@ export function LandingPage({ onStartStudent }: LandingPageProps) {
       <section className="workflow-section">
         <div className="workflow-copy">
           <p className="eyebrow">Diagnosis flow</p>
+
           <h2>From wrong answer to learning signal.</h2>
+
           <p>
             The system does not jump to an answer. It checks student reasoning,
             extracts evidence, maps the likely misconception, and keeps teacher
@@ -141,18 +171,22 @@ export function LandingPage({ onStartStudent }: LandingPageProps) {
             <span>01</span>
             <strong>Student attempt</strong>
           </div>
+
           <div>
             <span>02</span>
             <strong>Evidence extraction</strong>
           </div>
+
           <div>
             <span>03</span>
             <strong>Misconception mapping</strong>
           </div>
+
           <div>
             <span>04</span>
             <strong>Question / hint</strong>
           </div>
+
           <div>
             <span>05</span>
             <strong>Teacher review</strong>
@@ -161,24 +195,40 @@ export function LandingPage({ onStartStudent }: LandingPageProps) {
       </section>
 
       <section className="role-section">
-        <article className="role-card primary-role" onClick={onStartStudent}>
+        <article
+          className="role-card primary-role"
+          onClick={onStartStudent}
+        >
           <p className="eyebrow">Student mode</p>
+
           <h3>Start a private diagnostic session</h3>
+
           <p>
             Use a pseudonymous alias, choose a seeded DSA problem, and submit
-            reasoning in the next sprint.
+            reasoning for diagnosis.
           </p>
-          <button>Continue as Student</button>
+
+          <button type="button">
+            Continue as Student
+          </button>
         </article>
 
-        <article className="role-card disabled-role">
+        <article
+          className="role-card teacher-role"
+          onClick={onStartTeacher}
+        >
           <p className="eyebrow">Teacher mode</p>
+
           <h3>Review misconception evidence</h3>
+
           <p>
-            Teacher review queue, label correction, analytics, and exports will
-            be added after the student attempt flow is stable.
+            Inspect student attempts, diagnosis evidence, class trends, problem
+            analytics, and misconception patterns.
           </p>
-          <button disabled>Coming Soon</button>
+
+          <button type="button">
+            Open Teacher Dashboard
+          </button>
         </article>
       </section>
     </main>
