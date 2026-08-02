@@ -12,6 +12,7 @@ class DiagnosisState(str, Enum):
     CONFIDENT = "confident"
     POSSIBLE = "possible"
     INSUFFICIENT = "insufficient"
+    NO_MISCONCEPTION = "no_misconception"
 
 
 class EvidenceSource(str, Enum):
@@ -85,7 +86,11 @@ class DiagnosisCreate(BaseModel):
     state: DiagnosisState
     confidence: float = Field(..., ge=0.0, le=1.0)
     primary_misconception_id: UUID | None = None
-    model_version: str = Field(default="rule-v1", min_length=1, max_length=80)
+    model_version: str = Field(
+        default="rule-v1.3",
+        min_length=1,
+        max_length=80,
+    )
     decision_reason: str | None = Field(default=None, max_length=1000)
     next_action: DiagnosisNextAction = DiagnosisNextAction.NO_ACTION
     evidence: list[DiagnosisEvidenceCreate] = Field(default_factory=list)
@@ -98,17 +103,58 @@ class DiagnosisCreate(BaseModel):
             DiagnosisState.POSSIBLE,
         } and self.primary_misconception_id is None:
             raise ValueError(
-                "primary_misconception_id is required for confident or possible diagnosis."
+                "primary_misconception_id is required for confident or "
+                "possible diagnosis."
+            )
+
+        if self.state in {
+            DiagnosisState.INSUFFICIENT,
+            DiagnosisState.NO_MISCONCEPTION,
+        } and self.primary_misconception_id is not None:
+            raise ValueError(
+                "primary_misconception_id must be empty for insufficient "
+                "or no-misconception diagnosis."
             )
 
         if self.state == DiagnosisState.CONFIDENT and self.confidence < 0.75:
-            raise ValueError("confident diagnosis requires confidence >= 0.75.")
+            raise ValueError(
+                "confident diagnosis requires confidence >= 0.75."
+            )
 
-        if self.state == DiagnosisState.POSSIBLE and not (0.45 <= self.confidence < 0.75):
-            raise ValueError("possible diagnosis requires confidence between 0.45 and 0.74.")
+        if self.state == DiagnosisState.POSSIBLE and not (
+            0.45 <= self.confidence < 0.75
+        ):
+            raise ValueError(
+                "possible diagnosis requires confidence between 0.45 and 0.74."
+            )
 
-        if self.state == DiagnosisState.INSUFFICIENT and self.confidence >= 0.45:
-            raise ValueError("insufficient diagnosis requires confidence < 0.45.")
+        if self.state == DiagnosisState.INSUFFICIENT:
+            if self.confidence >= 0.45:
+                raise ValueError(
+                    "insufficient diagnosis requires confidence < 0.45."
+                )
+
+            if self.next_action == DiagnosisNextAction.NO_ACTION:
+                raise ValueError(
+                    "insufficient diagnosis must request clarification or "
+                    "a diagnostic question."
+                )
+
+        if self.state == DiagnosisState.NO_MISCONCEPTION:
+            if self.confidence < 0.75:
+                raise ValueError(
+                    "no-misconception diagnosis requires confidence >= 0.75."
+                )
+
+            if self.next_action != DiagnosisNextAction.NO_ACTION:
+                raise ValueError(
+                    "no-misconception diagnosis requires next_action=no_action."
+                )
+
+            if self.alternatives:
+                raise ValueError(
+                    "no-misconception diagnosis must not contain alternatives."
+                )
 
         return self
 
@@ -120,7 +166,9 @@ class DiagnosisResponse(BaseModel):
     confidence: float = Field(..., ge=0.0, le=1.0)
     primary_misconception: MisconceptionSummary | None = None
     evidence: list[DiagnosisEvidenceResponse] = Field(default_factory=list)
-    alternatives: list[DiagnosisAlternativeResponse] = Field(default_factory=list)
+    alternatives: list[DiagnosisAlternativeResponse] = Field(
+        default_factory=list
+    )
     model_version: str
     decision_reason: str | None = None
     next_action: DiagnosisNextAction
@@ -152,16 +200,60 @@ class RuleDetectionResult(BaseModel):
             DiagnosisState.POSSIBLE,
         } and not self.misconception_code:
             raise ValueError(
-                "misconception_code is required for confident or possible rule result."
+                "misconception_code is required for confident or "
+                "possible rule result."
+            )
+
+        if self.state in {
+            DiagnosisState.INSUFFICIENT,
+            DiagnosisState.NO_MISCONCEPTION,
+        } and self.misconception_code is not None:
+            raise ValueError(
+                "misconception_code must be empty for insufficient or "
+                "no-misconception rule result."
             )
 
         if self.state == DiagnosisState.CONFIDENT and self.confidence < 0.75:
-            raise ValueError("confident rule result requires confidence >= 0.75.")
+            raise ValueError(
+                "confident rule result requires confidence >= 0.75."
+            )
 
-        if self.state == DiagnosisState.POSSIBLE and not (0.45 <= self.confidence < 0.75):
-            raise ValueError("possible rule result requires confidence between 0.45 and 0.74.")
+        if self.state == DiagnosisState.POSSIBLE and not (
+            0.45 <= self.confidence < 0.75
+        ):
+            raise ValueError(
+                "possible rule result requires confidence between "
+                "0.45 and 0.74."
+            )
 
-        if self.state == DiagnosisState.INSUFFICIENT and self.confidence >= 0.45:
-            raise ValueError("insufficient rule result requires confidence < 0.45.")
+        if self.state == DiagnosisState.INSUFFICIENT:
+            if self.confidence >= 0.45:
+                raise ValueError(
+                    "insufficient rule result requires confidence < 0.45."
+                )
+
+            if self.next_action == DiagnosisNextAction.NO_ACTION:
+                raise ValueError(
+                    "insufficient rule result must request clarification or "
+                    "a diagnostic question."
+                )
+
+        if self.state == DiagnosisState.NO_MISCONCEPTION:
+            if self.confidence < 0.75:
+                raise ValueError(
+                    "no-misconception rule result requires confidence >= 0.75."
+                )
+
+            if self.next_action != DiagnosisNextAction.NO_ACTION:
+                raise ValueError(
+                    "no-misconception rule result requires "
+                    "next_action=no_action."
+                )
+
+            if self.alternative_misconception_codes:
+                raise ValueError(
+                    "no-misconception rule result must not contain "
+                    "alternative misconception codes."
+                )
 
         return self

@@ -2338,3 +2338,1220 @@ button {
     justify-content: flex-start;
   }
 }
+/* ================================
+   Sprint 4.7 Problem Detail + Attempt UI
+   ================================ */
+
+.student-page {
+  width: min(1440px, calc(100vw - 80px));
+  margin: 28px auto 56px;
+  color: #071226;
+  text-align: left;
+}
+
+.student-shell {
+  width: 100%;
+}
+
+.student-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 76px;
+  padding: 16px 20px;
+  border: 1px solid #d7dee9;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 20px 55px rgba(15, 23, 42, 0.08);
+  margin-bottom: 28px;
+}
+
+.student-topbar .brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.student-topbar .brand-mark {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #071226;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 950;
+  letter-spacing: -0.06em;
+}
+
+.student-topbar .brand-lockup strong {
+  display: block;
+  color: #071226;
+  font-size: 19px;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.student-topbar .brand-lockup span {
+  display: block;
+  margin-top: 4px;
+  color: #53627a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.session-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.session-strip strong {
+  color: #071226;
+  font-weight: 950;
+}
+
+.session-strip .secondary-button,
+.student-topbar .secondary-button {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 13px;
+  background: #ffffff;
+  color: #071226;
+  font-weight: 900;
+  box-shadow: none;
+}
+
+.detail-hero-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 24px;
+  align-items: stretch;
+  padding: 30px 34px;
+  border: 1px solid #d7dee9;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.07);
+}
+
+.detail-hero-main {
+  min-width: 0;
+}
+
+.problem-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+
+.problem-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: capitalize;
+}
+
+.problem-chip-dark {
+  border-color: #071226;
+  background: #071226;
+  color: #ffffff;
+}
+
+.detail-hero-card h1 {
+  margin: 0;
+  max-width: 900px;
+  color: #071226;
+  font-size: clamp(38px, 4.4vw, 64px);
+  line-height: 0.98;
+  letter-spacing: -0.065em;
+}
+
+.problem-statement {
+  max-width: 920px;
+  margin: 18px 0 0;
+  white-space: pre-line;
+  color: #27364d;
+  font-size: 17px;
+  font-weight: 550;
+  line-height: 1.68;
+}
+
+.detail-meta-card {
+  display: grid;
+  align-content: center;
+  gap: 12px;
+}
+
+.detail-meta-card div {
+  padding: 16px;
+  border: 1px solid #d7dee9;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.detail-meta-card span {
+  display: block;
+  margin-bottom: 7px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.detail-meta-card strong {
+  display: block;
+  color: #071226;
+  font-size: 19px;
+  font-weight: 950;
+}
+
+.mapped-rules-card {
+  margin-top: 18px;
+  padding: 22px 24px;
+  border: 1px solid #d7dee9;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.045);
+}
+
+.mapped-rule-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.mapped-rule-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #d7dee9;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.mapped-rule-item span {
+  display: inline-grid;
+  min-width: 42px;
+  height: 32px;
+  place-items: center;
+  border-radius: 999px;
+  background: #071226;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.mapped-rule-item strong {
+  color: #071226;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.attempt-workspace-card {
+  margin-top: 22px;
+  padding: 30px;
+  border: 1px solid #d7dee9;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.07);
+}
+
+.attempt-workspace-heading {
+  margin-bottom: 22px;
+}
+
+.attempt-workspace-heading h2 {
+  margin: 0;
+  max-width: 760px;
+  color: #071226;
+  font-size: clamp(30px, 3vw, 46px);
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.attempt-workspace-heading p {
+  max-width: 660px;
+  margin: 12px 0 0;
+  color: #334155;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.attempt-form-redesign {
+  display: grid;
+  gap: 18px;
+}
+
+.attempt-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.form-field {
+  display: grid;
+  gap: 9px;
+  color: #071226;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.form-field.full-width {
+  grid-column: 1 / -1;
+}
+
+.form-field span {
+  color: #071226;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.form-field span strong {
+  color: #dc2626;
+}
+
+.form-field textarea,
+.form-field input,
+.form-field select {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  border-radius: 16px;
+  background: #ffffff;
+  color: #071226;
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 1.55;
+  padding: 14px 15px;
+  outline: none;
+}
+
+.form-field textarea:focus,
+.form-field input:focus,
+.form-field select:focus {
+  border-color: rgba(37, 99, 235, 0.65);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.form-field .code-textarea,
+.code-textarea {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace !important;
+  font-size: 14px !important;
+  background: #071226 !important;
+  color: #e5eefc !important;
+  border-color: #071226 !important;
+}
+
+.attempt-submit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-top: 4px;
+}
+
+.attempt-submit-row p {
+  margin: 0;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.attempt-submit-row .primary-button,
+.attempt-actions .primary-button {
+  min-height: 50px;
+  padding: 0 22px;
+  border-radius: 14px;
+  background: #071226;
+  color: #ffffff;
+  font-weight: 950;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.16);
+}
+
+.attempt-error {
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: 16px;
+  background: #fef2f2;
+  color: #991b1b;
+  padding: 14px 16px;
+  font-weight: 850;
+}
+
+.attempt-flow {
+  display: grid;
+  gap: 18px;
+}
+
+.attempt-saved-card {
+  padding: 24px;
+  border: 1px solid rgba(22, 163, 74, 0.25);
+  border-radius: 20px;
+  background: #f7fff9;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.045);
+}
+
+.attempt-saved-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.attempt-saved-header h2 {
+  margin: 0;
+  color: #071226;
+  font-size: clamp(28px, 3vw, 42px);
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.attempt-saved-header p {
+  max-width: 620px;
+  margin: 10px 0 0;
+  color: #334155;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.state-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 950;
+  text-transform: capitalize;
+}
+
+.state-pill-success {
+  border: 1px solid #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.state-pill-warning {
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.state-pill-muted {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.saved-attempt-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.saved-attempt-grid div {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 15px;
+  background: #ffffff;
+}
+
+.saved-attempt-grid span {
+  display: block;
+  margin-bottom: 7px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.saved-attempt-grid strong {
+  display: block;
+  color: #071226;
+  font-size: 14px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.mono-value {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+}
+
+.split-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.split-actions .secondary-button {
+  min-height: 50px;
+  padding: 0 20px;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #071226;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  box-shadow: none;
+  font-weight: 900;
+}
+
+.diagnosis-result-card {
+  padding: 26px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 22px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 18px 52px rgba(15, 23, 42, 0.07);
+}
+
+.diagnosis-result-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.diagnosis-result-header h2 {
+  margin: 0;
+  max-width: 820px;
+  color: #071226;
+  font-size: clamp(30px, 3.3vw, 48px);
+  line-height: 1;
+  letter-spacing: -0.06em;
+}
+
+.diagnosis-score-card {
+  min-width: 118px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #071226;
+  color: #ffffff;
+  text-align: center;
+}
+
+.diagnosis-score-card strong {
+  display: block;
+  font-size: 26px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.diagnosis-score-card span {
+  display: block;
+  margin-top: 6px;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.diagnosis-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.diagnosis-section {
+  margin-top: 20px;
+}
+
+.diagnosis-section h3 {
+  margin: 0 0 12px;
+  color: #071226;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.evidence-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: evidence-counter;
+}
+
+.evidence-list li {
+  counter-increment: evidence-counter;
+  position: relative;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.evidence-list li span {
+  display: inline-flex;
+  align-items: center;
+  align-self: start;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.evidence-list li p {
+  margin: 0;
+  color: #24324a;
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 1.55;
+}
+
+.alternative-list {
+  display: grid;
+  gap: 10px;
+}
+
+.alternative-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #d7dee9;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.alternative-item div {
+  display: grid;
+  gap: 4px;
+}
+
+.alternative-item span {
+  color: #475569;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.diagnosis-next-action {
+  margin-top: 20px;
+  padding: 15px 16px;
+  border: 1px solid #d7dee9;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.diagnosis-next-action span {
+  display: block;
+  margin-bottom: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.diagnosis-next-action strong {
+  color: #071226;
+  font-size: 16px;
+  font-weight: 950;
+  text-transform: capitalize;
+}
+
+.diagnosis-note,
+.muted-text {
+  margin: 12px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+@media (max-width: 980px) {
+  .student-page {
+    width: min(100% - 28px, 760px);
+    margin-top: 18px;
+  }
+
+  .student-topbar,
+  .session-strip,
+  .detail-hero-card,
+  .attempt-form-grid,
+  .saved-attempt-grid,
+  .diagnosis-result-header {
+    grid-template-columns: 1fr;
+  }
+
+  .student-topbar,
+  .session-strip,
+  .attempt-saved-header,
+  .split-actions,
+  .attempt-submit-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .detail-hero-card {
+    display: grid;
+  }
+
+  .attempt-workspace-card {
+    padding: 22px;
+  }
+
+  .saved-attempt-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .evidence-list li {
+    grid-template-columns: 1fr;
+  }
+
+  .attempt-submit-row .primary-button,
+  .split-actions .primary-button,
+  .split-actions .secondary-button {
+    width: 100%;
+  }
+}
+
+/* Sprint 4.7 logo and language polish */
+
+.student-topbar .brand-mark {
+  width: 52px;
+  height: 44px;
+  min-width: 52px;
+  border-radius: 13px;
+  font-size: 13px;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.student-topbar .brand-lockup {
+  min-width: 260px;
+}
+
+
+/* ==========================================================================\n   Sprint 4.8 — Problem progress and application-state polish\n   Keep this section at the very bottom of App.css.\n   ========================================================================== */
+
+.app-loading-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.app-loading-page .state-card {
+  width: min(100%, 520px);
+  margin: 0;
+  text-align: center;
+}
+
+.workspace-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(92px, 1fr));
+  gap: 12px;
+  align-self: center;
+}
+
+.workspace-stats .stat-tile {
+  min-width: 92px;
+}
+
+.status-pill.not-started,
+.status-pill.not_started {
+  border: 1px solid #d7dee9;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.status-pill.in-progress,
+.status-pill.in_progress,
+.problem-progress-pill.in-progress,
+.problem-progress-pill.in_progress {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.status-pill.submitted,
+.problem-progress-pill.submitted {
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  color: #a16207;
+}
+
+.status-pill.diagnosed,
+.problem-progress-pill.diagnosed {
+  border: 1px solid #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.problem-progress-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.problem-code-column {
+  min-width: 76px;
+}
+
+.problem-code-column .status-pill,
+.problem-code-column .problem-progress-pill {
+  max-width: 100%;
+}
+
+.problem-action-column {
+  min-width: 132px;
+}
+
+.problem-action-column button {
+  min-width: 112px;
+  white-space: nowrap;
+}
+
+.problem-action-column .continue-button,
+.problem-action-column .action-continue,
+.primary-button.continue-action {
+  background: #1d4ed8;
+}
+
+.problem-action-column .submitted-button,
+.problem-action-column .action-submitted,
+.primary-button.submitted-action {
+  border: 1px solid #d7dee9;
+  background: #ffffff;
+  color: #071226;
+  box-shadow: none;
+}
+
+.problem-action-column .diagnosis-button,
+.problem-action-column .action-diagnosis,
+.primary-button.view-diagnosis-action {
+  background: #047857;
+}
+
+.problem-action-column button:disabled {
+  border: 1px solid #d7dee9;
+  background: #eef2f7;
+  color: #64748b;
+  opacity: 1;
+}
+
+.problem-action-stack {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.problem-action-note,
+.problem-progress-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.progress-summary,
+.problem-progress-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.progress-summary span,
+.problem-progress-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid #d7dee9;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.progress-summary strong,
+.problem-progress-summary strong {
+  color: #071226;
+  font-weight: 950;
+}
+
+.student-bank-page,
+.student-bank-page h1,
+.student-bank-page h2,
+.student-bank-page p,
+.student-bank-page span,
+.student-bank-page strong,
+.problem-row-card,
+.problem-content-column,
+.diagnostic-focus-line {
+  text-align: left;
+}
+
+@media (min-width: 981px) {
+  .problem-row-card {
+    grid-template-columns: 92px minmax(0, 1fr) 148px;
+  }
+
+  .problem-action-column {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 1180px) {
+  .workspace-summary-card {
+    align-items: center;
+  }
+
+  .workspace-stats {
+    grid-template-columns: repeat(2, minmax(88px, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .workspace-stats {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .problem-action-column,
+  .problem-action-stack {
+    width: 100%;
+    justify-content: stretch;
+    justify-items: stretch;
+  }
+
+  .problem-action-column button,
+  .problem-action-stack button {
+    width: 100%;
+  }
+
+  .problem-action-note,
+  .problem-progress-note {
+    text-align: left;
+  }
+}
+
+@media (max-width: 560px) {
+  .student-bank-page,
+  .student-page {
+    width: min(100% - 18px, 760px);
+    margin-top: 10px;
+  }
+
+  .student-bank-header,
+  .student-topbar {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .brand-logo,
+  .student-topbar .brand-mark {
+    width: 46px;
+    min-width: 46px;
+    height: 42px;
+  }
+
+  .workspace-summary-card {
+    margin-top: 18px;
+    padding: 22px 18px;
+    border-radius: 20px;
+  }
+
+  .workspace-summary-card h1 {
+    font-size: 38px;
+  }
+
+  .workspace-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .problem-row-card {
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .problem-content-column h2 {
+    font-size: 21px;
+  }
+}
+
+/* ==========================================================================
+   Sprint 4.7 final polish — attempt states, diagnosis evidence, missing signal
+   Keep this section at the very bottom of App.css.
+   ========================================================================== */
+
+.attempt-form-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 38px;
+  margin: 0 0 2px;
+  padding: 8px 12px;
+  border: 1px solid #d7dee9;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.attempt-form-status > span:last-child {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.attempt-status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.state-pill-info {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.attempt-saved-header {
+  display: block;
+}
+
+.attempt-saved-header .section-kicker {
+  margin-bottom: 8px;
+}
+
+.attempt-saved-header h2 {
+  margin-top: 0;
+}
+
+.evidence-list .evidence-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 170px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  width: 100%;
+}
+
+.evidence-list .evidence-source {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  margin: 0;
+  padding: 6px 10px;
+  overflow-wrap: anywhere;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.evidence-list .evidence-text {
+  min-width: 0;
+  margin: 0;
+  padding-top: 3px;
+  overflow-wrap: anywhere;
+  color: #24324a;
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 1.55;
+}
+
+.diagnosis-missing-signal {
+  display: grid;
+  grid-template-columns: minmax(120px, 150px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 15px 16px;
+  border: 1px solid #fed7aa;
+  border-radius: 16px;
+  background: #fffaf0;
+}
+
+.diagnosis-missing-signal > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #ffedd5;
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.diagnosis-missing-signal p {
+  min-width: 0;
+  margin: 0;
+  padding-top: 3px;
+  color: #7c2d12;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.diagnosis-result-card .diagnosis-note {
+  padding: 14px 16px;
+  border: 1px solid #d7dee9;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #475569;
+}
+
+.attempt-actions.split-actions {
+  margin-top: 0;
+}
+
+.attempt-actions.split-actions:has(.secondary-button:only-child) {
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .evidence-list .evidence-row,
+  .diagnosis-missing-signal {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .evidence-list .evidence-source,
+  .diagnosis-missing-signal > span {
+    width: fit-content;
+    max-width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .attempt-form-status {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+
+/* ==========================================================================
+   Sprint 4.7 close-out — verified no-misconception diagnosis
+   Keep this section at the very bottom of App.css.
+   ========================================================================== */
+
+.diagnosis-result-card:has(.diagnosis-score-card-clear) {
+  border-color: rgba(22, 163, 74, 0.24);
+  background: linear-gradient(180deg, #ffffff 0%, #f6fff8 100%);
+}
+
+.diagnosis-score-card-clear {
+  min-width: 138px;
+  border: 1px solid #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
+  box-shadow: none;
+}
+
+.diagnosis-score-card-clear strong {
+  color: #047857;
+  font-size: 22px;
+  letter-spacing: -0.035em;
+}
+
+.diagnosis-score-card-clear span {
+  color: #166534;
+  font-size: 10px;
+  letter-spacing: 0.09em;
+}
+
+.diagnosis-status-row .state-pill-success {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.diagnosis-note-success {
+  border-color: #bbf7d0 !important;
+  background: #f0fdf4 !important;
+  color: #166534 !important;
+}
+
+.diagnosis-result-card:has(.diagnosis-score-card-clear)
+  .diagnosis-next-action {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.diagnosis-result-card:has(.diagnosis-score-card-clear)
+  .diagnosis-next-action span {
+  color: #15803d;
+}
+
+.diagnosis-result-card:has(.diagnosis-score-card-clear)
+  .diagnosis-next-action strong {
+  color: #166534;
+}
+
+.diagnosis-result-card:has(.diagnosis-score-card-clear)
+  .evidence-list .evidence-row {
+  border-color: rgba(22, 163, 74, 0.18);
+}
+
+.diagnosis-result-card:has(.diagnosis-score-card-clear)
+  .evidence-list .evidence-source {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+@media (max-width: 720px) {
+  .diagnosis-score-card-clear {
+    width: 100%;
+    min-width: 0;
+  }
+}

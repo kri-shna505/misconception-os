@@ -12,14 +12,28 @@ from sqlalchemy.orm import Session
 from app.schemas.diagnosis import (
     DiagnosisAlternativeResponse,
     DiagnosisEvidenceResponse,
+    DiagnosisNextAction,
     DiagnosisResponse,
+    DiagnosisState,
     MisconceptionSummary,
 )
 from app.services.evidence_extractor import extract_evidence
 from app.services.rule_detector import detect_misconception
 
 
-MODEL_VERSION = "rule-v1"
+MODEL_VERSION = "rule-v1.3"
+
+
+# Diagnosis must remain inside the misconception taxonomy configured for the
+# selected problem. This prevents a detector signal from one topic (for example,
+# recursion) being returned for an unrelated problem (for example, binary search).
+PROBLEM_MISCONCEPTION_ALLOWLIST: dict[str, set[str]] = {
+    "P1": {"M1"},
+    "P2": {"M2", "M3"},
+    "P3": {"M2", "M3"},
+    "P4": {"M4"},
+    "P5": {"M5"},
+}
 
 
 def create_diagnosis_from_attempt(
@@ -49,6 +63,7 @@ def create_diagnosis_from_attempt(
     existing_diagnosis = _get_existing_diagnosis_for_attempt(
         db=db,
         attempt_id=attempt.id,
+        model_version=MODEL_VERSION,
     )
 
     if existing_diagnosis is not None:
@@ -58,17 +73,70 @@ def create_diagnosis_from_attempt(
         )
 
     problem = _get_problem_or_404(db, attempt.problem_id)
+    allowed_codes = _get_allowed_misconception_codes(problem)
 
-    signals = extract_evidence(attempt, problem)
-    rule_result = detect_misconception(signals)
+    # Keep detection inside the selected problem's misconception taxonomy.
+    signals = extract_evidence(attempt=attempt, problem=problem)
+    rule_result = detect_misconception(
+        signals,
+        allowed_rule_codes=allowed_codes,
+    )
+
+    detected_code = _normalize_code(rule_result.misconception_code)
+    detection_is_supported = bool(
+        detected_code and detected_code in allowed_codes
+    )
+
+    if detection_is_supported:
+        final_state = rule_result.state
+        final_confidence = rule_result.confidence
+        final_misconception_code = detected_code
+        final_evidence = list(rule_result.evidence)
+        final_alternative_codes = [
+            code
+            for code in (
+                _normalize_code(item)
+                for item in rule_result.alternative_misconception_codes
+            )
+            if code
+            and code in allowed_codes
+            and code != final_misconception_code
+        ]
+        final_decision_reason = rule_result.decision_reason
+        final_next_action = rule_result.next_action
+
+    elif detected_code is None:
+        # Correct or non-diagnostic work can produce no misconception code.
+        # Preserve positive evidence instead of erasing it.
+        final_state = rule_result.state
+        final_confidence = rule_result.confidence
+        final_misconception_code = None
+        final_evidence = list(rule_result.evidence)
+        final_alternative_codes = []
+        final_decision_reason = rule_result.decision_reason
+        final_next_action = rule_result.next_action
+
+    else:
+        # Reject cross-topic output while preserving observable evidence.
+        final_state = DiagnosisState.INSUFFICIENT
+        final_confidence = 0.0
+        final_misconception_code = None
+        final_evidence = list(rule_result.evidence)
+        final_alternative_codes = []
+        final_decision_reason = _unsupported_detection_reason(
+            problem_code=problem.code,
+            detected_code=detected_code,
+            allowed_codes=allowed_codes,
+        )
+        final_next_action = DiagnosisNextAction.ASK_DIAGNOSTIC_QUESTION
 
     primary_misconception = None
     primary_misconception_id = None
 
-    if rule_result.misconception_code:
+    if final_misconception_code:
         primary_misconception = _get_misconception_by_code_or_404(
             db=db,
-            code=rule_result.misconception_code,
+            code=final_misconception_code,
         )
         primary_misconception_id = primary_misconception.id
 
@@ -104,18 +172,18 @@ def create_diagnosis_from_attempt(
         {
             "id": diagnosis_id,
             "attempt_id": attempt.id,
-            "state": rule_result.state.value,
+            "state": _state_value(final_state),
             "primary_misconception_id": primary_misconception_id,
-            "confidence": rule_result.confidence,
+            "confidence": final_confidence,
             "model_version": MODEL_VERSION,
-            "rule_score": rule_result.confidence,
+            "rule_score": final_confidence,
             "llm_score": None,
         },
     )
 
     evidence_responses: list[DiagnosisEvidenceResponse] = []
 
-    for index, evidence in enumerate(rule_result.evidence):
+    for index, evidence in enumerate(final_evidence):
         evidence_id = uuid4()
 
         db.execute(
@@ -143,7 +211,10 @@ def create_diagnosis_from_attempt(
                 "id": evidence_id,
                 "diagnosis_id": diagnosis_id,
                 "evidence_type": evidence.source.value,
-                "rule_id": rule_result.misconception_code or "INSUFFICIENT",
+                "rule_id": (
+                    final_misconception_code
+                    or _state_value(final_state).upper()
+                ),
                 "evidence_text": evidence.text,
             },
         )
@@ -162,13 +233,13 @@ def create_diagnosis_from_attempt(
 
     alternative_responses: list[DiagnosisAlternativeResponse] = []
 
-    for alternative_code in rule_result.alternative_misconception_codes:
+    for alternative_code in final_alternative_codes:
         alternative_misconception = _get_misconception_by_code_or_404(
             db=db,
             code=alternative_code,
         )
         alternative_id = uuid4()
-        alternative_confidence = _alternative_confidence(rule_result.confidence)
+        alternative_confidence = _alternative_confidence(final_confidence)
 
         db.execute(
             text(
@@ -212,15 +283,22 @@ def create_diagnosis_from_attempt(
             )
         )
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to persist diagnosis result.",
+        ) from exc
 
     created_at = _get_diagnosis_created_at(db, diagnosis_id)
 
     return DiagnosisResponse(
         id=diagnosis_id,
         attempt_id=attempt.id,
-        state=rule_result.state,
-        confidence=rule_result.confidence,
+        state=final_state,
+        confidence=final_confidence,
         primary_misconception=(
             MisconceptionSummary(
                 id=primary_misconception.id,
@@ -234,15 +312,81 @@ def create_diagnosis_from_attempt(
         evidence=evidence_responses,
         alternatives=alternative_responses,
         model_version=MODEL_VERSION,
-        decision_reason=rule_result.decision_reason,
-        next_action=rule_result.next_action,
+        decision_reason=final_decision_reason,
+        next_action=final_next_action,
         created_at=created_at,
     )
 
 
+
+def _get_allowed_misconception_codes(problem: SimpleNamespace) -> set[str]:
+    """
+    Return the misconception codes that are valid for the selected problem.
+
+    The current MVP uses a seeded problem bank. Keeping this allowlist in the
+    service layer provides a final safety boundary even when an extractor or
+    detector emits a cross-topic false positive.
+    """
+    problem_code = _normalize_code(getattr(problem, "code", None))
+
+    if problem_code and problem_code in PROBLEM_MISCONCEPTION_ALLOWLIST:
+        return set(PROBLEM_MISCONCEPTION_ALLOWLIST[problem_code])
+
+    rule_context = getattr(problem, "rule_context", {}) or {}
+    configured_codes = rule_context.get("misconception_codes", [])
+
+    if isinstance(configured_codes, str):
+        configured_codes = [configured_codes]
+
+    if isinstance(configured_codes, list):
+        normalized_codes = {
+            code
+            for code in (_normalize_code(item) for item in configured_codes)
+            if code
+        }
+        if normalized_codes:
+            return normalized_codes
+
+    return set()
+
+
+def _unsupported_detection_reason(
+    problem_code: str,
+    detected_code: str | None,
+    allowed_codes: set[str],
+) -> str:
+    normalized_problem_code = _normalize_code(problem_code) or "UNKNOWN"
+    allowed_label = ", ".join(sorted(allowed_codes)) or "none"
+
+    if detected_code:
+        return (
+            f"Detector produced {detected_code}, but problem "
+            f"{normalized_problem_code} only supports: {allowed_label}. "
+            "The cross-topic result was rejected."
+        )
+
+    return (
+        f"No supported misconception signal was detected for problem "
+        f"{normalized_problem_code}. Allowed codes: {allowed_label}."
+    )
+
+
+def _normalize_code(value: Any) -> str | None:
+    if value is None:
+        return None
+
+    normalized = str(value).strip().upper()
+    return normalized or None
+
+
+def _state_value(state: Any) -> str:
+    value = getattr(state, "value", state)
+    return str(value).strip().lower()
+
 def _get_existing_diagnosis_for_attempt(
     db: Session,
     attempt_id: UUID,
+    model_version: str,
 ) -> SimpleNamespace | None:
     row = db.execute(
         text(
@@ -259,11 +403,15 @@ def _get_existing_diagnosis_for_attempt(
                 created_at
             FROM diagnoses
             WHERE attempt_id = :attempt_id
+              AND model_version = :model_version
             ORDER BY created_at DESC
             LIMIT 1
             """
         ),
-        {"attempt_id": attempt_id},
+        {
+            "attempt_id": attempt_id,
+            "model_version": model_version,
+        },
     ).mappings().first()
 
     if row is None:
@@ -307,7 +455,10 @@ def _build_existing_diagnosis_response(
         evidence=evidence,
         alternatives=alternatives,
         model_version=diagnosis.model_version or MODEL_VERSION,
-        decision_reason="Existing diagnosis returned. Duplicate diagnosis creation was skipped for this attempt.",
+        decision_reason=_existing_diagnosis_reason(
+            state=diagnosis.state,
+            has_primary_misconception=primary_misconception is not None,
+        ),
         next_action=_next_action_for_existing_diagnosis(
             state=diagnosis.state,
             confidence=diagnosis.confidence,
@@ -442,18 +593,56 @@ def _get_existing_alternatives_for_diagnosis(
     return alternative_responses
 
 
+
+def _existing_diagnosis_reason(
+    state: str,
+    has_primary_misconception: bool,
+) -> str:
+    normalized_state = str(state).strip().lower()
+
+    if normalized_state == DiagnosisState.NO_MISCONCEPTION.value:
+        return (
+            "Existing no-misconception diagnosis returned. Duplicate diagnosis "
+            "creation was skipped for this attempt."
+        )
+
+    if has_primary_misconception:
+        return (
+            "Existing misconception diagnosis returned. Duplicate diagnosis "
+            "creation was skipped for this attempt."
+        )
+
+    return (
+        "Existing diagnosis returned. Duplicate diagnosis creation was skipped "
+        "for this attempt."
+    )
+
 def _next_action_for_existing_diagnosis(
     state: str,
     confidence: float | None,
     has_primary_misconception: bool,
-) -> str:
-    if state == "confident" and has_primary_misconception:
-        return "show_hint"
+) -> DiagnosisNextAction:
+    normalized_state = str(state).strip().lower()
+
+    if normalized_state == DiagnosisState.NO_MISCONCEPTION.value:
+        return DiagnosisNextAction.NO_ACTION
+
+    if (
+        normalized_state == DiagnosisState.CONFIDENT.value
+        and has_primary_misconception
+    ):
+        return DiagnosisNextAction.SHOW_HINT
+
+    if normalized_state == DiagnosisState.POSSIBLE.value:
+        return DiagnosisNextAction.ASK_DIAGNOSTIC_QUESTION
+
+    if normalized_state == DiagnosisState.INSUFFICIENT.value:
+        return DiagnosisNextAction.ASK_CLARIFICATION
 
     if confidence is not None and confidence >= 0.45:
-        return "ask_diagnostic_question"
+        return DiagnosisNextAction.ASK_DIAGNOSTIC_QUESTION
 
-    return "request_more_evidence"
+    return DiagnosisNextAction.NO_ACTION
 
 
 def _get_attempt_or_404(db: Session, attempt_id: UUID) -> SimpleNamespace:
