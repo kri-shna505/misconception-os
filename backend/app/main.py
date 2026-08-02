@@ -6,18 +6,60 @@ from app.api.routes.diagnosis_routes import router as diagnoses_router
 from app.api.routes.health_routes import router as health_router
 from app.api.routes.problem_routes import router as problems_router
 from app.api.routes.student_routes import router as student_router
+from app.api.routes.teacher_routes import router as teacher_router
 
 
 app = FastAPI(
     title="MisconceptionOS API",
-    description="Backend API for the MisconceptionOS DSA diagnostic tutor.",
-    version="0.1.0",
+    description=(
+        "Backend API for the MisconceptionOS DSA diagnostic tutor, including "
+        "student submissions, evidence-backed diagnosis, and teacher analytics."
+    ),
+    version="0.2.0",
+    openapi_tags=[
+        {
+            "name": "System",
+            "description": "API status and root information.",
+        },
+        {
+            "name": "Health",
+            "description": "Backend and database health checks.",
+        },
+        {
+            "name": "Students",
+            "description": "Pseudonymous student-session operations.",
+        },
+        {
+            "name": "Problems",
+            "description": "DSA problem-bank operations.",
+        },
+        {
+            "name": "Attempts",
+            "description": "Student-attempt submission and retrieval.",
+        },
+        {
+            "name": "Diagnoses",
+            "description": (
+                "Evidence extraction and rule-based misconception diagnosis."
+            ),
+        },
+        {
+            "name": "Teacher",
+            "description": (
+                "Teacher dashboard, attempt review, student history, and "
+                "analytics endpoints."
+            ),
+        },
+    ],
 )
 
 # Development CORS configuration.
 #
 # Allows the Vite frontend to run on localhost or 127.0.0.1 using any
 # development port, such as 5173, 5174, 5175, and so on.
+#
+# This permissive localhost configuration is for development only.
+# Production deployment must use an explicit allow-list.
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
@@ -27,13 +69,20 @@ app.add_middleware(
 )
 
 
-@app.get("/", tags=["System"])
+@app.get(
+    "/",
+    tags=["System"],
+    summary="Get API information",
+)
 def root() -> dict[str, str]:
     return {
         "name": "MisconceptionOS API",
+        "version": app.version,
         "status": "running",
         "docs": "/docs",
+        "openapi": "/openapi.json",
         "health": "/api/health",
+        "teacher_dashboard": "/api/teacher/dashboard",
     }
 
 
@@ -59,5 +108,10 @@ app.include_router(
 
 app.include_router(
     diagnoses_router,
+    prefix="/api",
+)
+
+app.include_router(
+    teacher_router,
     prefix="/api",
 )

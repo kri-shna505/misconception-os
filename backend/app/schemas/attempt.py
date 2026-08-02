@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from pydantic import (
@@ -19,39 +18,53 @@ class AttemptCreate(BaseModel):
         str_strip_whitespace=False,
     )
 
-    student_alias_id: UUID
-    problem_id: UUID
+    student_alias_id: UUID = Field(
+        ...,
+        description="Pseudonymous student session identifier.",
+    )
 
-    final_answer: Optional[str] = Field(
+    problem_id: UUID = Field(
+        ...,
+        description="Identifier of the problem being attempted.",
+    )
+
+    final_answer: str | None = Field(
         default=None,
         max_length=4000,
+        description="Student's final answer, when provided.",
     )
 
     written_reasoning: str = Field(
+        ...,
         min_length=5,
         max_length=6000,
+        description="Student's written explanation of the chosen approach.",
     )
 
-    source_code: Optional[str] = Field(
+    source_code: str | None = Field(
         default=None,
         max_length=12000,
+        description="Optional source code submitted with the attempt.",
     )
 
-    speech_transcript: Optional[str] = Field(
+    speech_transcript: str | None = Field(
         default=None,
         max_length=6000,
+        description="Optional transcript captured from a spoken explanation.",
     )
 
     selected_language: str = Field(
         default="python",
         min_length=1,
         max_length=30,
+        description="Programming language selected for the attempt.",
     )
 
-    response_time_seconds: Optional[int] = Field(
+    response_time_seconds: int | None = Field(
         default=None,
         ge=0,
         le=7200,
+        description="Time spent on the attempt, measured in seconds.",
     )
 
     @field_validator(
@@ -64,7 +77,7 @@ class AttemptCreate(BaseModel):
     def normalize_optional_text(
         cls,
         value: object,
-    ) -> Optional[str]:
+    ) -> str | None:
         if value is None:
             return None
 
@@ -72,11 +85,7 @@ class AttemptCreate(BaseModel):
             raise TypeError("Text fields must contain strings.")
 
         normalized = value.strip()
-
-        if not normalized:
-            return None
-
-        return normalized
+        return normalized or None
 
     @field_validator(
         "written_reasoning",
@@ -128,13 +137,10 @@ class AttemptCreate(BaseModel):
             normalized,
         )
 
-        if not normalized:
-            return "python"
-
-        return normalized
+        return normalized or "python"
 
     @model_validator(mode="after")
-    def validate_attempt_content(self) -> AttemptCreate:
+    def validate_attempt_content(self) -> "AttemptCreate":
         if (
             self.final_answer is None
             and self.source_code is None
@@ -158,10 +164,29 @@ class AttemptResponse(BaseModel):
     student_alias_id: UUID
     problem_id: UUID
 
-    final_answer: Optional[str] = None
+    final_answer: str | None = None
     written_reasoning: str
-    source_code: Optional[str] = None
-    speech_transcript: Optional[str] = None
+    source_code: str | None = None
+    speech_transcript: str | None = None
     selected_language: str
-    response_time_seconds: Optional[int] = None
+    response_time_seconds: int | None = None
+    created_at: datetime
+
+
+class AttemptSummary(BaseModel):
+    """
+    Lightweight attempt representation for teacher-facing lists,
+    filters, pagination, and student-history responses.
+    """
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        extra="ignore",
+    )
+
+    id: UUID
+    student_alias_id: UUID
+    problem_id: UUID
+    selected_language: str
+    response_time_seconds: int | None = None
     created_at: datetime
