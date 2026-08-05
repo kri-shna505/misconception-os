@@ -147,6 +147,13 @@ class DiagnosisAlternativeResponse(BaseModel):
 
 
 class DiagnosisCreate(BaseModel):
+    """
+    Request schema used when a diagnosis is created explicitly.
+
+    Sprint 8 uses rule-v1.4 so M4 and M5 results remain distinguishable from
+    earlier rule-v1.3 diagnoses generated before the expanded taxonomy.
+    """
+
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -163,7 +170,7 @@ class DiagnosisCreate(BaseModel):
     primary_misconception_id: UUID | None = None
 
     model_version: str = Field(
-        default="rule-v1.3",
+        default="rule-v1.4",
         min_length=1,
         max_length=80,
     )
@@ -242,8 +249,8 @@ class DiagnosisResponse(BaseModel):
 
 class DiagnosisSummary(BaseModel):
     """
-    Lightweight diagnosis representation for Sprint 5 teacher-facing
-    tables, filters, pagination, and analytics responses.
+    Lightweight diagnosis representation for teacher-facing tables,
+    filters, pagination, analytics, and review-aware attempt responses.
     """
 
     model_config = ConfigDict(
@@ -293,6 +300,14 @@ class RuleEvidence(BaseModel):
 
 
 class RuleDetectionResult(BaseModel):
+    """
+    Structured output contract for the rule detector.
+
+    This contract is shared by M1-M5. Confident and possible outputs must carry
+    a misconception code, while insufficient and no-misconception outputs must
+    not carry one.
+    """
+
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -337,6 +352,15 @@ class RuleDetectionResult(BaseModel):
             ),
             context="rule result",
         )
+
+        if (
+            self.state == DiagnosisState.CONFIDENT
+            and not self.evidence
+        ):
+            raise ValueError(
+                "A confident rule result requires at least one "
+                "observable evidence item."
+            )
 
         return self
 
@@ -394,6 +418,11 @@ def _validate_diagnosis_state(
             raise ValueError(
                 f"An insufficient {context} must request clarification "
                 f"or a diagnostic question."
+            )
+
+        if has_alternatives:
+            raise ValueError(
+                f"An insufficient {context} must not contain alternatives."
             )
 
     if state == DiagnosisState.NO_MISCONCEPTION:

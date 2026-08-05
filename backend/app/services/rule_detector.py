@@ -12,7 +12,15 @@ from app.schemas.diagnosis import (
 from app.services.evidence_extractor import EvidenceSignals
 
 
-SUPPORTED_RULE_CODES = frozenset({"M1", "M2", "M3"})
+SUPPORTED_RULE_CODES = frozenset(
+    {
+        "M1",
+        "M2",
+        "M3",
+        "M4",
+        "M5",
+    }
+)
 
 
 def detect_misconception(
@@ -22,10 +30,12 @@ def detect_misconception(
     """
     Detect a supported misconception from already-extracted evidence.
 
-    Sprint 4 supported rules:
+    Supported rules:
     - M1: Binary Search on Unsorted Data
     - M2: Missing or Incorrect Recursion Base Case
     - M3: Recursive Call Without Reducing Problem Size
+    - M4: Pass-by-Value vs Pass-by-Reference Confusion
+    - M5: Stack vs Heap Confusion
 
     Cross-topic protection:
     Only rules mapped to the selected problem are evaluated when
@@ -89,6 +99,16 @@ def detect_misconception(
         if result is not None:
             return _filter_alternatives(result, allowed_rules)
 
+    if "M4" in allowed_rules:
+        result = _detect_m4_parameter_passing_confusion(signals)
+        if result is not None:
+            return _filter_alternatives(result, allowed_rules)
+
+    if "M5" in allowed_rules:
+        result = _detect_m5_stack_heap_confusion(signals)
+        if result is not None:
+            return _filter_alternatives(result, allowed_rules)
+
     return _insufficient_result(
         evidence=_weak_or_general_evidence(signals),
         reason=(
@@ -96,7 +116,6 @@ def detect_misconception(
             "enough observable evidence for a reliable diagnosis."
         ),
     )
-
 
 
 def _detect_supported_correct_structure(
@@ -196,7 +215,118 @@ def _detect_supported_correct_structure(
             next_action=DiagnosisNextAction.NO_ACTION,
         )
 
+    if "M4" in allowed_rules:
+        correct_parameter_semantics = _has_evidence_fragment(
+            signals,
+            [
+                "caller variables remain unchanged",
+                "original caller variables do not change",
+                "uses pointers to modify caller variables",
+                "passes addresses",
+                "dereferences the pointers",
+                "returns the swapped values",
+                "correctly explains pass-by-value",
+                "correctly explains parameter passing",
+            ],
+        )
+
+        if (
+            correct_parameter_semantics
+            and not _signal_enabled(
+                signals,
+                "parameter_reassignment_claims_caller_mutation",
+            )
+            and not _signal_enabled(
+                signals,
+                "pass_by_value_confusion_detected",
+            )
+        ):
+            evidence = _evidence_matching(
+                signals,
+                [
+                    "caller variables remain unchanged",
+                    "original caller variables do not change",
+                    "uses pointers to modify caller variables",
+                    "passes addresses",
+                    "dereferences the pointers",
+                    "returns the swapped values",
+                    "correctly explains pass-by-value",
+                    "correctly explains parameter passing",
+                ],
+            )
+
+            return RuleDetectionResult(
+                state=DiagnosisState.NO_MISCONCEPTION,
+                misconception_code=None,
+                confidence=0.95,
+                evidence=evidence,
+                alternative_misconception_codes=[],
+                decision_reason=(
+                    "The student correctly distinguishes local parameter changes "
+                    "from caller-visible mutation and uses or explains an appropriate "
+                    "mechanism such as pointers or returned values."
+                ),
+                next_action=DiagnosisNextAction.NO_ACTION,
+            )
+
+    if "M5" in allowed_rules:
+        correct_memory_model = _has_evidence_fragment(
+            signals,
+            [
+                "each recursive call has its own stack frame",
+                "separate stack frame",
+                "local variables are stored in the stack frame",
+                "stack frame is removed when the call returns",
+                "heap allocation has a separate lifetime",
+                "correctly distinguishes stack and heap",
+                "one frame per active call",
+            ],
+        )
+
+        if (
+            correct_memory_model
+            and not _signal_enabled(
+                signals,
+                "stack_heap_confusion_detected",
+            )
+            and not _signal_enabled(
+                signals,
+                "single_stack_frame_claim_detected",
+            )
+            and not _signal_enabled(
+                signals,
+                "locals_survive_return_claim_detected",
+            )
+        ):
+            evidence = _evidence_matching(
+                signals,
+                [
+                    "each recursive call has its own stack frame",
+                    "separate stack frame",
+                    "local variables are stored in the stack frame",
+                    "stack frame is removed when the call returns",
+                    "heap allocation has a separate lifetime",
+                    "correctly distinguishes stack and heap",
+                    "one frame per active call",
+                ],
+            )
+
+            return RuleDetectionResult(
+                state=DiagnosisState.NO_MISCONCEPTION,
+                misconception_code=None,
+                confidence=0.95,
+                evidence=evidence,
+                alternative_misconception_codes=[],
+                decision_reason=(
+                    "The student correctly explains that active function calls use "
+                    "separate stack frames and distinguishes stack-frame lifetime "
+                    "from heap-allocation lifetime."
+                ),
+                next_action=DiagnosisNextAction.NO_ACTION,
+            )
+
     return None
+
 
 def _normalize_allowed_rule_codes(
     allowed_rule_codes: Iterable[str] | None,
@@ -395,6 +525,298 @@ def _detect_m3_recursive_no_progress(
         )
 
     return None
+
+
+
+def _detect_m4_parameter_passing_confusion(
+    signals: EvidenceSignals,
+) -> RuleDetectionResult | None:
+    """
+    M4:
+    The student assumes that reassigning local parameters automatically changes
+    the caller's original variables, or otherwise confuses value, pointer, and
+    reference semantics.
+
+    This detector supports both explicit extractor flags and evidence-text
+    matching. The optional flags allow evidence_extractor.py to become more
+    structured without breaking this file in the meantime.
+    """
+
+    direct_confusion = any(
+        (
+            _signal_enabled(
+                signals,
+                "parameter_reassignment_claims_caller_mutation",
+            ),
+            _signal_enabled(
+                signals,
+                "pass_by_value_confusion_detected",
+            ),
+        )
+    )
+
+    local_swap_only = _signal_enabled(
+        signals,
+        "swap_uses_only_local_reassignment",
+    )
+
+    reasoning_confusion = _has_evidence_fragment(
+        signals,
+        [
+            "changing the local parameters changes the caller variables",
+            "reassigning parameters swaps the original variables",
+            "caller variables are automatically changed",
+            "local reassignment modifies the caller",
+            "pass by value changes the original variable",
+            "swap succeeds using only local assignments",
+            "parameters are references by default",
+        ],
+    )
+
+    code_only_local_swap = (
+        local_swap_only
+        or _has_evidence_fragment(
+            signals,
+            [
+                "swap function only reassigns local parameters",
+                "local parameter swap detected without pointers",
+                "no pointer dereference was detected",
+                "caller-visible mutation mechanism was not detected",
+                "only local assignments were detected",
+            ],
+        )
+    )
+
+    correct_mechanism = any(
+        (
+            _signal_enabled(signals, "pointer_based_swap_detected"),
+            _signal_enabled(signals, "return_based_swap_detected"),
+            _has_evidence_fragment(
+                signals,
+                [
+                    "uses pointers to modify caller variables",
+                    "passes addresses",
+                    "dereferences the pointers",
+                    "returns the swapped values",
+                    "caller variables remain unchanged without pointers",
+                    "correctly explains pass-by-value",
+                ],
+            ),
+        )
+    )
+
+    if correct_mechanism and not direct_confusion and not reasoning_confusion:
+        return None
+
+    if not direct_confusion and not reasoning_confusion and not code_only_local_swap:
+        return None
+
+    evidence = _evidence_matching(
+        signals,
+        [
+            "changing the local parameters changes the caller variables",
+            "reassigning parameters swaps the original variables",
+            "caller variables are automatically changed",
+            "local reassignment modifies the caller",
+            "pass by value changes the original variable",
+            "swap succeeds using only local assignments",
+            "parameters are references by default",
+            "swap function only reassigns local parameters",
+            "local parameter swap detected without pointers",
+            "no pointer dereference was detected",
+            "caller-visible mutation mechanism was not detected",
+            "only local assignments were detected",
+        ],
+    )
+
+    if direct_confusion or (
+        reasoning_confusion
+        and code_only_local_swap
+    ):
+        return RuleDetectionResult(
+            state=DiagnosisState.CONFIDENT,
+            misconception_code="M4",
+            confidence=0.92,
+            evidence=evidence,
+            alternative_misconception_codes=[],
+            decision_reason=(
+                "The submission treats local parameter reassignment as if it "
+                "automatically mutates the caller's original variables, without "
+                "using or explaining the required pointer, reference, or return "
+                "mechanism."
+            ),
+            next_action=DiagnosisNextAction.SHOW_HINT,
+        )
+
+    return RuleDetectionResult(
+        state=DiagnosisState.POSSIBLE,
+        misconception_code="M4",
+        confidence=0.66,
+        evidence=evidence,
+        alternative_misconception_codes=[],
+        decision_reason=(
+            "The submission contains one observable parameter-passing confusion "
+            "signal, but the available evidence is not strong enough to confirm "
+            "whether the student understands caller-visible mutation."
+        ),
+        next_action=DiagnosisNextAction.ASK_DIAGNOSTIC_QUESTION,
+    )
+
+
+def _detect_m5_stack_heap_confusion(
+    signals: EvidenceSignals,
+) -> RuleDetectionResult | None:
+    """
+    M5:
+    The student confuses stack frames, heap allocation, local-variable lifetime,
+    or recursive-call memory behaviour.
+    """
+
+    explicit_confusion = any(
+        (
+            _signal_enabled(signals, "stack_heap_confusion_detected"),
+            _signal_enabled(signals, "single_stack_frame_claim_detected"),
+            _signal_enabled(signals, "locals_survive_return_claim_detected"),
+            _signal_enabled(signals, "recursive_locals_on_heap_claim_detected"),
+        )
+    )
+
+    strong_confusion = _has_evidence_fragment(
+        signals,
+        [
+            "all recursive local variables are stored on the heap",
+            "recursive calls reuse one stack frame",
+            "only one stack frame is used",
+            "local variables remain after the function returns",
+            "stack variables survive after return",
+            "stack and heap are the same",
+            "function call frames are stored on the heap",
+            "each recursive call overwrites the same local variables",
+        ],
+    )
+
+    partial_confusion = _has_evidence_fragment(
+        signals,
+        [
+            "memory explanation confuses stack and heap",
+            "stack-frame lifetime is unclear",
+            "heap lifetime is unclear",
+            "recursive call memory model is incomplete",
+            "does not distinguish active call frames",
+            "local variable lifetime is incorrectly explained",
+        ],
+    )
+
+    correct_memory_model = _has_evidence_fragment(
+        signals,
+        [
+            "each recursive call has its own stack frame",
+            "separate stack frame",
+            "one frame per active call",
+            "stack frame is removed when the call returns",
+            "heap allocation has a separate lifetime",
+            "correctly distinguishes stack and heap",
+        ],
+    )
+
+    if correct_memory_model and not explicit_confusion and not strong_confusion:
+        return None
+
+    if not explicit_confusion and not strong_confusion and not partial_confusion:
+        return None
+
+    evidence = _evidence_matching(
+        signals,
+        [
+            "all recursive local variables are stored on the heap",
+            "recursive calls reuse one stack frame",
+            "only one stack frame is used",
+            "local variables remain after the function returns",
+            "stack variables survive after return",
+            "stack and heap are the same",
+            "function call frames are stored on the heap",
+            "each recursive call overwrites the same local variables",
+            "memory explanation confuses stack and heap",
+            "stack-frame lifetime is unclear",
+            "heap lifetime is unclear",
+            "recursive call memory model is incomplete",
+            "does not distinguish active call frames",
+            "local variable lifetime is incorrectly explained",
+        ],
+    )
+
+    if explicit_confusion or strong_confusion:
+        return RuleDetectionResult(
+            state=DiagnosisState.CONFIDENT,
+            misconception_code="M5",
+            confidence=0.91,
+            evidence=evidence,
+            alternative_misconception_codes=[],
+            decision_reason=(
+                "The student's explanation contains a direct stack/heap or "
+                "stack-frame-lifetime misconception, such as reusing one frame "
+                "for all recursive calls or retaining local variables after return."
+            ),
+            next_action=DiagnosisNextAction.SHOW_HINT,
+        )
+
+    return RuleDetectionResult(
+        state=DiagnosisState.POSSIBLE,
+        misconception_code="M5",
+        confidence=0.62,
+        evidence=evidence,
+        alternative_misconception_codes=[],
+        decision_reason=(
+            "The memory explanation is incomplete or ambiguous about stack frames, "
+            "heap allocation, or local-variable lifetime, so a diagnostic question "
+            "is required before confirming M5."
+        ),
+        next_action=DiagnosisNextAction.ASK_DIAGNOSTIC_QUESTION,
+    )
+
+
+def _signal_enabled(
+    signals: EvidenceSignals,
+    attribute_name: str,
+) -> bool:
+    """
+    Read an optional boolean EvidenceSignals attribute safely.
+
+    Sprint 8 adds structured M4/M5 signals in evidence_extractor.py. Using a
+    safe accessor keeps this detector importable while the extractor update is
+    applied in the next step.
+    """
+
+    return bool(
+        getattr(
+            signals,
+            attribute_name,
+            False,
+        )
+    )
+
+
+def _has_evidence_fragment(
+    signals: EvidenceSignals,
+    text_fragments: list[str],
+) -> bool:
+    """
+    Return True when any extracted evidence contains a relevant phrase.
+    """
+
+    normalized_fragments = [
+        fragment.strip().lower()
+        for fragment in text_fragments
+        if fragment.strip()
+    ]
+
+    return any(
+        any(
+            fragment in item.text.lower()
+            for fragment in normalized_fragments
+        )
+        for item in signals.evidence
+    )
 
 
 def _filter_alternatives(

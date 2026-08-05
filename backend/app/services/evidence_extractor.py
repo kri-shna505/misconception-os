@@ -36,6 +36,18 @@ class EvidenceSignals:
 
     weak_submission: bool
 
+    # Sprint 8 (M4 / M5)
+    parameter_reassignment_claims_caller_mutation: bool
+    pass_by_value_confusion_detected: bool
+    swap_uses_only_local_reassignment: bool
+    pointer_based_swap_detected: bool
+    return_based_swap_detected: bool
+
+    stack_heap_confusion_detected: bool
+    single_stack_frame_claim_detected: bool
+    locals_survive_return_claim_detected: bool
+    recursive_locals_on_heap_claim_detected: bool
+
 
 def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
     """
@@ -286,6 +298,72 @@ def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
         recursive_call_decreasing_argument=recursive_info["decreasing_argument"],
         recursive_call_unknown_progress=recursive_info["unknown_progress"],
         weak_submission=weak_submission,
+
+        # Sprint 8
+        parameter_reassignment_claims_caller_mutation=_contains_any(
+            combined_reasoning,
+            [
+                "changing the local parameters changes the caller variables",
+                "local reassignment modifies the caller",
+            ],
+        ),
+        pass_by_value_confusion_detected=_contains_any(
+            combined_reasoning,
+            [
+                "pass by value changes the original variable",
+                "parameters are references by default",
+            ],
+        ),
+        swap_uses_only_local_reassignment=_contains_any(
+            source_code,
+            [
+                "temp = a",
+                "a = b",
+                "b = temp",
+            ],
+        ),
+        pointer_based_swap_detected=_contains_any(
+            source_code,
+            [
+                "*a",
+                "*b",
+                "&",
+            ],
+        ),
+        return_based_swap_detected=_contains_any(
+            source_code,
+            [
+                "return",
+            ],
+        ),
+
+        stack_heap_confusion_detected=_contains_any(
+            combined_reasoning,
+            [
+                "stack and heap are the same",
+                "function call frames are stored on the heap",
+            ],
+        ),
+        single_stack_frame_claim_detected=_contains_any(
+            combined_reasoning,
+            [
+                "only one stack frame",
+                "recursive calls reuse one stack frame",
+            ],
+        ),
+        locals_survive_return_claim_detected=_contains_any(
+            combined_reasoning,
+            [
+                "local variables remain after the function returns",
+                "stack variables survive after return",
+            ],
+        ),
+        recursive_locals_on_heap_claim_detected=_contains_any(
+            combined_reasoning,
+            [
+                "all recursive local variables are stored on the heap",
+            ],
+        ),
     )
 
 
@@ -304,6 +382,29 @@ def _safe_text(value: Any) -> str:
         return ""
 
     return str(value).strip()
+
+
+
+def _contains_any(
+    text: str | None,
+    phrases: list[str],
+) -> bool:
+    """
+    Return True when normalized text contains at least one non-empty phrase.
+
+    Matching is case-insensitive. Missing or blank text safely returns False.
+    """
+
+    normalized_text = (text or "").strip().lower()
+
+    if not normalized_text:
+        return False
+
+    return any(
+        phrase.strip().lower() in normalized_text
+        for phrase in phrases
+        if phrase.strip()
+    )
 
 
 def _safe_rule_context(value: Any) -> dict[str, Any]:

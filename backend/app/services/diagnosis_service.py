@@ -21,7 +21,7 @@ from app.services.evidence_extractor import extract_evidence
 from app.services.rule_detector import detect_misconception
 
 
-MODEL_VERSION = "rule-v1.3"
+MODEL_VERSION = "rule-v1.4"
 
 
 # Diagnosis must remain inside the misconception taxonomy configured for the
@@ -43,12 +43,14 @@ def create_diagnosis_from_attempt(
     """
     Create an evidence-backed rule diagnosis from an existing saved attempt.
 
-    Sprint 4 scope:
+    Sprint 8 scope:
     - M1 Binary Search on Unsorted Data
     - M2 Missing or Incorrect Recursion Base Case
     - M3 Recursive Call Without Reducing Problem Size
+    - M4 Pass-by-Value vs Pass-by-Reference Confusion
+    - M5 Stack vs Heap Confusion
 
-    Sprint 4.1 hardening:
+    Hardening:
     - If an attempt already has a diagnosis, return the latest existing diagnosis.
     - Do not create duplicate diagnosis rows for accidental repeated calls.
 
@@ -56,6 +58,12 @@ def create_diagnosis_from_attempt(
     - diagnoses
     - diagnosis_evidence
     - diagnosis_alternatives
+
+    Sprint 8 integration:
+    - Restricts each problem to its configured misconception taxonomy.
+    - Persists M4/M5 rule results using the same evidence-backed contract.
+    - Uses rule-v1.4 so new Sprint 8 diagnoses do not collide with prior
+      rule-v1.3 results for the same attempt.
     """
 
     attempt = _get_attempt_or_404(db, attempt_id)
@@ -128,7 +136,14 @@ def create_diagnosis_from_attempt(
             detected_code=detected_code,
             allowed_codes=allowed_codes,
         )
-        final_next_action = DiagnosisNextAction.ASK_DIAGNOSTIC_QUESTION
+        final_next_action = DiagnosisNextAction.ASK_CLARIFICATION
+
+    _validate_final_diagnosis_contract(
+        state=final_state,
+        misconception_code=final_misconception_code,
+        confidence=final_confidence,
+        evidence=final_evidence,
+    )
 
     primary_misconception = None
     primary_misconception_id = None
@@ -317,6 +332,66 @@ def create_diagnosis_from_attempt(
         created_at=created_at,
     )
 
+
+
+def _validate_final_diagnosis_contract(
+    *,
+    state: DiagnosisState,
+    misconception_code: str | None,
+    confidence: float,
+    evidence: list[Any],
+) -> None:
+    """
+    Enforce the structured diagnosis contract before writing to the database.
+
+    A confident or possible diagnosis must identify a misconception. A
+    no-misconception or insufficient result must not carry one. Confident
+    diagnoses must include observable evidence.
+    """
+
+    normalized_state = _state_value(state)
+
+    if not 0.0 <= float(confidence) <= 1.0:
+        raise HTTPException(
+            status_code=500,
+            detail="Diagnosis confidence must be between 0 and 1.",
+        )
+
+    if normalized_state in {
+        DiagnosisState.CONFIDENT.value,
+        DiagnosisState.POSSIBLE.value,
+    } and not misconception_code:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Confident or possible diagnosis requires a "
+                "misconception code."
+            ),
+        )
+
+    if normalized_state in {
+        DiagnosisState.NO_MISCONCEPTION.value,
+        DiagnosisState.INSUFFICIENT.value,
+    } and misconception_code:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "No-misconception or insufficient diagnosis must not "
+                "carry a misconception code."
+            ),
+        )
+
+    if (
+        normalized_state == DiagnosisState.CONFIDENT.value
+        and not evidence
+    ):
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Confident diagnosis requires at least one observable "
+                "evidence item."
+            ),
+        )
 
 
 def _get_allowed_misconception_codes(problem: SimpleNamespace) -> set[str]:
