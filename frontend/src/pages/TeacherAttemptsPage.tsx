@@ -149,6 +149,42 @@ function formatConfidence(
   return `${Math.round(value * 100)}%`;
 }
 
+
+function getDisplayedDiagnosisState(
+  item: TeacherAttemptListItem
+): string | undefined {
+  if (
+    item.review?.status === "reviewed" &&
+    item.review.final_state
+  ) {
+    return item.review.final_state;
+  }
+
+  return (
+    item.system_diagnosis?.state ??
+    item.diagnosis?.state
+  );
+}
+
+
+function getDisplayedConfidence(
+  item: TeacherAttemptListItem
+): string {
+  if (
+    item.review?.status === "reviewed" &&
+    item.review.final_state
+  ) {
+    return "Reviewed";
+  }
+
+  return formatConfidence(
+    (
+      item.system_diagnosis ??
+      item.diagnosis
+    )?.confidence
+  );
+}
+
 function buildApiFilters({
   page,
   pageSize,
@@ -800,22 +836,23 @@ export function TeacherAttemptsPage({
                       <td>
                         <span
                           className={diagnosisClassName(
-                            item.diagnosis
-                              ?.state
+                            getDisplayedDiagnosisState(
+                              item
+                            )
                           )}
                         >
                           {formatDiagnosisState(
-                            item.diagnosis
-                              ?.state
+                            getDisplayedDiagnosisState(
+                              item
+                            )
                           )}
                         </span>
                       </td>
 
                       <td>
                         <strong>
-                          {formatConfidence(
-                            item.diagnosis
-                              ?.confidence
+                          {getDisplayedConfidence(
+                            item
                           )}
                         </strong>
                       </td>

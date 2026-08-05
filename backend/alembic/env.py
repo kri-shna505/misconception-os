@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.database import Base
 
 # Import every model explicitly so Alembic can discover all tables,
-# columns, constraints, and indexes during --autogenerate.
+# columns, constraints, foreign keys, and indexes during autogenerate.
 from app.models.attempt import Attempt  # noqa: F401
 from app.models.diagnosis import Diagnosis  # noqa: F401
 from app.models.diagnosis_alternative import DiagnosisAlternative  # noqa: F401
@@ -20,6 +20,7 @@ from app.models.misconception import Misconception  # noqa: F401
 from app.models.problem import Problem  # noqa: F401
 from app.models.problem_misconception import ProblemMisconception  # noqa: F401
 from app.models.student_alias import StudentAlias  # noqa: F401
+from app.models.teacher_review import TeacherReview  # noqa: F401
 from app.models.user import User  # noqa: F401
 
 
@@ -54,6 +55,7 @@ def run_migrations_offline() -> None:
         },
         compare_type=True,
         compare_server_default=True,
+        render_as_batch=False,
     )
 
     with context.begin_transaction():
@@ -82,6 +84,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             compare_type=True,
             compare_server_default=True,
+            render_as_batch=False,
         )
 
         with context.begin_transaction():

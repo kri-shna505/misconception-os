@@ -2,10 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.attempt_routes import router as attempts_router
+from app.api.routes.auth import router as auth_router
 from app.api.routes.diagnosis_routes import router as diagnoses_router
 from app.api.routes.health_routes import router as health_router
 from app.api.routes.problem_routes import router as problems_router
 from app.api.routes.student_routes import router as student_router
+from app.api.routes.teacher_review_routes import (
+    router as teacher_reviews_router,
+)
 from app.api.routes.teacher_routes import router as teacher_router
 
 
@@ -13,9 +17,10 @@ app = FastAPI(
     title="MisconceptionOS API",
     description=(
         "Backend API for the MisconceptionOS DSA diagnostic tutor, including "
-        "student submissions, evidence-backed diagnosis, and teacher analytics."
+        "student submissions, evidence-backed diagnosis, teacher analytics, "
+        "teacher authentication, and teacher review workflows."
     ),
-    version="0.2.0",
+    version="0.4.0",
     openapi_tags=[
         {
             "name": "System",
@@ -24,6 +29,13 @@ app = FastAPI(
         {
             "name": "Health",
             "description": "Backend and database health checks.",
+        },
+        {
+            "name": "Authentication",
+            "description": (
+                "Teacher login, authenticated-user lookup, logout, "
+                "and password-management endpoints."
+            ),
         },
         {
             "name": "Students",
@@ -46,8 +58,15 @@ app = FastAPI(
         {
             "name": "Teacher",
             "description": (
-                "Teacher dashboard, attempt review, student history, and "
-                "analytics endpoints."
+                "Teacher dashboard, attempt review, student history, "
+                "and analytics endpoints."
+            ),
+        },
+        {
+            "name": "Teacher Reviews",
+            "description": (
+                "Protected teacher-review queue, draft, acceptance, "
+                "override, finalization, and reopen operations."
             ),
         },
     ],
@@ -82,12 +101,20 @@ def root() -> dict[str, str]:
         "docs": "/docs",
         "openapi": "/openapi.json",
         "health": "/api/health",
+        "auth_login": "/api/auth/login",
+        "auth_me": "/api/auth/me",
         "teacher_dashboard": "/api/teacher/dashboard",
+        "teacher_reviews": "/api/teacher/reviews",
     }
 
 
 app.include_router(
     health_router,
+    prefix="/api",
+)
+
+app.include_router(
+    auth_router,
     prefix="/api",
 )
 
@@ -113,5 +140,10 @@ app.include_router(
 
 app.include_router(
     teacher_router,
+    prefix="/api",
+)
+
+app.include_router(
+    teacher_reviews_router,
     prefix="/api",
 )

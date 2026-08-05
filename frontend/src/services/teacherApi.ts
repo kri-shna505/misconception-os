@@ -1,4 +1,5 @@
 import { apiGet } from "../api/client";
+
 import type {
   MisconceptionAnalyticsQuery,
   MisconceptionAnalyticsResponse,
@@ -16,9 +17,14 @@ import type {
 const TEACHER_API_PREFIX = "/teacher";
 
 
-function sanitizeText(value: string | undefined): string | undefined {
+function sanitizeText(
+  value: string | undefined
+): string | undefined {
   const normalized = value?.trim();
-  return normalized ? normalized : undefined;
+
+  return normalized
+    ? normalized
+    : undefined;
 }
 
 
@@ -41,7 +47,27 @@ function normalizePositiveInteger(
 
   return maximum === undefined
     ? normalized
-    : Math.min(normalized, maximum);
+    : Math.min(
+        normalized,
+        maximum
+      );
+}
+
+
+function normalizeRequiredId(
+  value: string,
+  fieldName: string
+): string {
+  const normalizedValue =
+    value.trim();
+
+  if (!normalizedValue) {
+    throw new Error(
+      `${fieldName} is required.`
+    );
+  }
+
+  return normalizedValue;
 }
 
 
@@ -49,11 +75,12 @@ export async function getTeacherDashboard(
   query: TeacherDashboardQuery = {},
   signal?: AbortSignal
 ): Promise<TeacherDashboardResponse> {
-  const days = normalizePositiveInteger(
-    query.days,
-    30,
-    365
-  );
+  const days =
+    normalizePositiveInteger(
+      query.days,
+      30,
+      365
+    );
 
   const topMisconceptions =
     normalizePositiveInteger(
@@ -67,7 +94,8 @@ export async function getTeacherDashboard(
     {
       query: {
         days,
-        top_misconceptions: topMisconceptions,
+        top_misconceptions:
+          topMisconceptions,
       },
       signal,
     }
@@ -79,37 +107,64 @@ export async function getTeacherAttempts(
   filters: TeacherAttemptFilters = {},
   signal?: AbortSignal
 ): Promise<TeacherAttemptListResponse> {
-  const page = normalizePositiveInteger(
-    filters.page,
-    1
-  );
+  const page =
+    normalizePositiveInteger(
+      filters.page,
+      1
+    );
 
-  const pageSize = normalizePositiveInteger(
-    filters.page_size,
-    20,
-    100
-  );
+  const pageSize =
+    normalizePositiveInteger(
+      filters.page_size,
+      20,
+      100
+    );
 
+  /*
+   * The backend now returns each attempt together with its
+   * diagnosis and teacher-review summary.
+   *
+   * No per-row review requests are required here.
+   */
   return apiGet<TeacherAttemptListResponse>(
     `${TEACHER_API_PREFIX}/attempts`,
     {
       query: {
         page,
         page_size: pageSize,
+
         student_alias_id:
-          sanitizeText(filters.student_alias_id),
+          sanitizeText(
+            filters.student_alias_id
+          ),
+
         problem_id:
-          sanitizeText(filters.problem_id),
+          sanitizeText(
+            filters.problem_id
+          ),
+
         diagnosis_state:
           filters.diagnosis_state,
+
         misconception_code:
-          sanitizeText(filters.misconception_code),
+          sanitizeText(
+            filters.misconception_code
+          ),
+
         created_from:
-          sanitizeText(filters.created_from),
+          sanitizeText(
+            filters.created_from
+          ),
+
         created_to:
-          sanitizeText(filters.created_to),
+          sanitizeText(
+            filters.created_to
+          ),
+
         search:
-          sanitizeText(filters.search),
+          sanitizeText(
+            filters.search
+          ),
       },
       signal,
     }
@@ -121,14 +176,16 @@ export async function getTeacherAttemptDetail(
   attemptId: string,
   signal?: AbortSignal
 ): Promise<TeacherAttemptDetailResponse> {
-  const normalizedAttemptId = attemptId.trim();
-
-  if (!normalizedAttemptId) {
-    throw new Error(
-      "attemptId is required to load teacher attempt details."
+  const normalizedAttemptId =
+    normalizeRequiredId(
+      attemptId,
+      "attemptId"
     );
-  }
 
+  /*
+   * The detail endpoint now returns the attempt, diagnosis,
+   * problem context, and teacher review in one response.
+   */
   return apiGet<TeacherAttemptDetailResponse>(
     `${TEACHER_API_PREFIX}/attempts/${encodeURIComponent(
       normalizedAttemptId
@@ -146,24 +203,23 @@ export async function getStudentHistory(
   signal?: AbortSignal
 ): Promise<StudentHistoryResponse> {
   const normalizedStudentAliasId =
-    studentAliasId.trim();
-
-  if (!normalizedStudentAliasId) {
-    throw new Error(
-      "studentAliasId is required to load student history."
+    normalizeRequiredId(
+      studentAliasId,
+      "studentAliasId"
     );
-  }
 
-  const page = normalizePositiveInteger(
-    query.page,
-    1
-  );
+  const page =
+    normalizePositiveInteger(
+      query.page,
+      1
+    );
 
-  const pageSize = normalizePositiveInteger(
-    query.page_size,
-    20,
-    100
-  );
+  const pageSize =
+    normalizePositiveInteger(
+      query.page_size,
+      20,
+      100
+    );
 
   return apiGet<StudentHistoryResponse>(
     `${TEACHER_API_PREFIX}/students/${encodeURIComponent(
@@ -184,13 +240,11 @@ export async function getProblemAnalytics(
   problemId: string,
   signal?: AbortSignal
 ): Promise<ProblemAnalyticsResponse> {
-  const normalizedProblemId = problemId.trim();
-
-  if (!normalizedProblemId) {
-    throw new Error(
-      "problemId is required to load problem analytics."
+  const normalizedProblemId =
+    normalizeRequiredId(
+      problemId,
+      "problemId"
     );
-  }
 
   return apiGet<ProblemAnalyticsResponse>(
     `${TEACHER_API_PREFIX}/problems/${encodeURIComponent(
@@ -207,11 +261,12 @@ export async function getMisconceptionAnalytics(
   query: MisconceptionAnalyticsQuery = {},
   signal?: AbortSignal
 ): Promise<MisconceptionAnalyticsResponse> {
-  const limit = normalizePositiveInteger(
-    query.limit,
-    20,
-    100
-  );
+  const limit =
+    normalizePositiveInteger(
+      query.limit,
+      20,
+      100
+    );
 
   return apiGet<MisconceptionAnalyticsResponse>(
     `${TEACHER_API_PREFIX}/misconceptions/analytics`,
@@ -226,10 +281,18 @@ export async function getMisconceptionAnalytics(
 
 
 export const teacherApi = {
-  getDashboard: getTeacherDashboard,
-  getAttempts: getTeacherAttempts,
-  getAttemptDetail: getTeacherAttemptDetail,
+  getDashboard:
+    getTeacherDashboard,
+
+  getAttempts:
+    getTeacherAttempts,
+
+  getAttemptDetail:
+    getTeacherAttemptDetail,
+
   getStudentHistory,
+
   getProblemAnalytics,
+
   getMisconceptionAnalytics,
 } as const;

@@ -17,6 +17,7 @@ from app.models.misconception import Misconception
 from app.models.problem import Problem
 from app.models.problem_misconception import ProblemMisconception
 from app.models.student_alias import StudentAlias
+from app.models.teacher_review import TeacherReview
 from app.schemas.attempt import AttemptResponse, AttemptSummary
 from app.schemas.diagnosis import (
     DiagnosisAlternativeResponse,
@@ -35,6 +36,7 @@ from app.schemas.problem_schema import (
     SupportedMisconception,
 )
 from app.schemas.student_schema import StudentAliasSummary
+from app.schemas.teacher_review import TeacherReviewResponse
 from app.schemas.teacher import (
     AttemptsOverTimeItem,
     DiagnosisStateMetric,
@@ -185,6 +187,7 @@ def list_teacher_attempts(
             Problem,
             Diagnosis,
             Misconception,
+            TeacherReview,
         )
         .join(
             StudentAlias,
@@ -201,6 +204,10 @@ def list_teacher_attempts(
         .outerjoin(
             Misconception,
             Misconception.id == Diagnosis.primary_misconception_id,
+        )
+        .outerjoin(
+            TeacherReview,
+            TeacherReview.attempt_id == Attempt.id,
         )
     )
 
@@ -257,8 +264,20 @@ def list_teacher_attempts(
                 if diagnosis is not None
                 else None
             ),
+            review=(
+                TeacherReviewResponse.model_validate(review)
+                if review is not None
+                else None
+            ),
         )
-        for attempt, student, problem, diagnosis, _ in rows
+        for (
+            attempt,
+            student,
+            problem,
+            diagnosis,
+            _,
+            review,
+        ) in rows
     ]
 
     return TeacherAttemptListResponse(

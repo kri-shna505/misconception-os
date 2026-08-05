@@ -64,6 +64,17 @@ function formatDiagnosisState(value: string): string {
 }
 
 
+function formatReviewDecision(
+  value: string | null | undefined
+): string {
+  if (!value) {
+    return "Not recorded";
+  }
+
+  return formatDiagnosisState(value);
+}
+
+
 function diagnosisClassName(state: string): string {
   switch (state) {
     case "confident":
@@ -190,6 +201,18 @@ export function TeacherAttemptDetailPage({
     [record]
   );
 
+  const finalizedReview =
+    record?.review?.status === "reviewed"
+      ? record.review
+      : null;
+
+  const finalizedReviewState =
+    finalizedReview?.final_state ?? null;
+
+  const effectiveDiagnosisState =
+    finalizedReviewState ??
+    record?.diagnosis?.state;
+
   function handleRetry() {
     setRefreshKey((current) => current + 1);
   }
@@ -314,24 +337,32 @@ export function TeacherAttemptDetailPage({
             </article>
 
             <article className="teacher-summary-card">
-              <p className="eyebrow">Diagnosis</p>
+              <p className="eyebrow">
+                {finalizedReview
+                  ? "Final diagnosis"
+                  : "Diagnosis"}
+              </p>
 
-              {record.diagnosis ? (
+              {effectiveDiagnosisState ? (
                 <>
                   <span
                     className={diagnosisClassName(
-                      record.diagnosis.state
+                      effectiveDiagnosisState
                     )}
                   >
                     {formatDiagnosisState(
-                      record.diagnosis.state
+                      effectiveDiagnosisState
                     )}
                   </span>
 
                   <strong>
-                    {formatPercent(
-                      record.diagnosis.confidence
-                    )}
+                    {finalizedReview
+                      ? "Teacher reviewed"
+                      : record.diagnosis
+                        ? formatPercent(
+                            record.diagnosis.confidence
+                          )
+                        : "—"}
                   </strong>
                 </>
               ) : (
@@ -405,6 +436,81 @@ export function TeacherAttemptDetailPage({
                   <h2>Evidence-backed diagnosis</h2>
                 </div>
               </div>
+
+              {finalizedReview && finalizedReviewState ? (
+                <>
+                  <div className="teacher-diagnosis-overview">
+                    <div>
+                      <span
+                        className={diagnosisClassName(
+                          finalizedReviewState
+                        )}
+                      >
+                        {formatDiagnosisState(
+                          finalizedReviewState
+                        )}
+                      </span>
+
+                      <strong>
+                        Teacher final
+                      </strong>
+                    </div>
+
+                    <dl>
+                      <div>
+                        <dt>Decision</dt>
+                        <dd>
+                          {formatReviewDecision(
+                            finalizedReview.decision
+                          )}
+                        </dd>
+                      </div>
+
+                      <div>
+                        <dt>Reviewed</dt>
+                        <dd>
+                          {finalizedReview.reviewed_at
+                            ? formatDateTime(
+                                finalizedReview.reviewed_at
+                              )
+                            : "Not recorded"}
+                        </dd>
+                      </div>
+
+                      <div>
+                        <dt>Final misconception</dt>
+                        <dd>
+                          {finalizedReview
+                            .final_misconception_id ??
+                            "None"}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+
+                  {finalizedReview.override_reason ? (
+                    <div className="teacher-detail-section">
+                      <h3>Override reason</h3>
+                      <div className="teacher-detail-text-block">
+                        {finalizedReview.override_reason}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {finalizedReview.teacher_note ? (
+                    <div className="teacher-detail-section">
+                      <h3>Teacher note</h3>
+                      <div className="teacher-detail-text-block">
+                        {finalizedReview.teacher_note}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="teacher-detail-section">
+                    <h3>Automated diagnosis</h3>
+                  </div>
+                </>
+              ) : null}
 
               {!record.diagnosis ? (
                 <div className="teacher-empty-state">

@@ -72,9 +72,14 @@ def read_teacher_dashboard(
     summary="List attempts for teacher review",
     description=(
         "Return a paginated teacher-facing list of student attempts with "
-        "student, problem, and diagnosis summaries."
+        "student, problem, diagnosis, and teacher-review summaries. "
+        "When a review exists, its current status, decision, final state, "
+        "and review metadata are included directly in the corresponding "
+        "attempt row."
     ),
-    response_description="Paginated attempt review list.",
+    response_description=(
+        "Paginated attempt review list with diagnosis and review context."
+    ),
 )
 def read_teacher_attempts(
     page: int = Query(
@@ -146,9 +151,12 @@ def read_teacher_attempts(
     summary="Get attempt review details",
     description=(
         "Return one complete student attempt with the student alias, "
-        "problem, diagnosis, evidence, and alternatives."
+        "problem, diagnosis, evidence, alternatives, and the latest "
+        "teacher-review record when one exists."
     ),
-    response_description="Complete teacher-facing attempt review record.",
+    response_description=(
+        "Complete teacher-facing attempt review record with review context."
+    ),
 )
 def read_teacher_attempt_detail(
     attempt_id: UUID,

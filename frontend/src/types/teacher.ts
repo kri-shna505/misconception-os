@@ -52,10 +52,12 @@ export type TeacherSupportedMisconception = {
 export type TeacherProblemDetail =
   TeacherProblemSummary & {
     statement: string;
+
     rule_context: Record<
       string,
       unknown
     > | null;
+
     supported_misconceptions:
       TeacherSupportedMisconception[];
   };
@@ -110,11 +112,74 @@ export type TeacherDiagnosisSummary = {
 };
 
 
+export type TeacherReviewStatus =
+  | "pending"
+  | "in_review"
+  | "reviewed";
+
+
+export type TeacherReviewDecision =
+  | "accepted"
+  | "overridden";
+
+
+export type TeacherFinalDiagnosisState =
+  | "confident"
+  | "possible"
+  | "insufficient"
+  | "no_misconception";
+
+
+export type TeacherReviewSummary = {
+  id: string;
+  attempt_id: string;
+  teacher_id: string;
+  system_diagnosis_id: string | null;
+
+  status: TeacherReviewStatus;
+
+  decision: TeacherReviewDecision | null;
+
+  final_state:
+    TeacherFinalDiagnosisState | null;
+
+  final_misconception_id:
+    string | null;
+
+  override_reason: string | null;
+  teacher_note: string | null;
+
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+
 export type TeacherAttemptListItem = {
   attempt: TeacherAttemptSummary;
   student: TeacherStudentSummary;
   problem: TeacherProblemSummary;
+
+  /*
+   * Existing /teacher/attempts response field.
+   */
   diagnosis: TeacherDiagnosisSummary | null;
+
+  /*
+   * Review-aware queue endpoints may return the same
+   * automated diagnosis using system_diagnosis.
+   */
+  system_diagnosis?:
+    TeacherDiagnosisSummary | null;
+
+  /*
+   * Final teacher decision.
+   *
+   * When status is reviewed and final_state exists,
+   * the frontend must treat final_state as authoritative
+   * instead of continuing to display diagnosis.state.
+   */
+  review: TeacherReviewSummary | null;
 };
 
 
@@ -129,6 +194,12 @@ export type TeacherAttemptDetailResponse = {
   student: TeacherStudentSummary;
   problem: TeacherProblemDetail;
   diagnosis: DiagnosisResponse | null;
+
+  /*
+   * Optional so the existing teacher-attempt detail
+   * endpoint remains backward compatible.
+   */
+  review: TeacherReviewSummary | null;
 };
 
 
@@ -140,8 +211,10 @@ export type TeacherDashboardSummary = {
   misconception_attempts: number;
   insufficient_attempts: number;
   undiagnosed_attempts: number;
+
   average_response_time_seconds:
     number | null;
+
   diagnosis_coverage_rate: number;
   verified_rate: number;
   misconception_rate: number;
@@ -172,10 +245,13 @@ export type MisconceptionAnalyticsItem = {
 
 export type TeacherDashboardResponse = {
   summary: TeacherDashboardSummary;
+
   misconception_analytics:
     MisconceptionAnalyticsItem[];
+
   attempts_over_time:
     AttemptsOverTimeItem[];
+
   generated_at: string;
 };
 
@@ -186,6 +262,7 @@ export type StudentHistorySummary = {
   verified_attempts: number;
   misconception_attempts: number;
   insufficient_attempts: number;
+
   average_response_time_seconds:
     number | null;
 };
@@ -195,6 +272,12 @@ export type StudentHistoryItem = {
   attempt: TeacherAttemptSummary;
   problem: TeacherProblemSummary;
   diagnosis: TeacherDiagnosisSummary | null;
+
+  /*
+   * Optional teacher-review context for future
+   * student-history endpoint support.
+   */
+  review?: TeacherReviewSummary | null;
 };
 
 
@@ -215,13 +298,16 @@ export type DiagnosisStateAnalyticsItem = {
 
 export type ProblemAnalyticsResponse = {
   problem: TeacherProblemAnalyticsSummary;
+
   total_attempts: number;
   diagnosed_attempts: number;
   verified_attempts: number;
   misconception_attempts: number;
   insufficient_attempts: number;
+
   average_response_time_seconds:
     number | null;
+
   diagnosis_states:
     DiagnosisStateAnalyticsItem[];
 };
@@ -229,7 +315,10 @@ export type ProblemAnalyticsResponse = {
 
 export type MisconceptionAnalyticsResponse = {
   total_diagnoses: number;
-  total_misconception_diagnoses: number;
+
+  total_misconception_diagnoses:
+    number;
+
   items: MisconceptionAnalyticsItem[];
 };
 
@@ -278,8 +367,10 @@ export type TeacherEvidence = {
 export type TeacherMisconceptionSummary =
   MisconceptionSummary;
 
+
 export type TeacherDiagnosisState =
   DiagnosisState;
+
 
 export type TeacherNextAction =
   DiagnosisNextAction;

@@ -1,11 +1,28 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  BrowserRouter,
+  Route,
+  Routes,
+  useNavigate,
+} from "react-router-dom";
+
 import "./App.css";
 
+import { LoginPage } from "./features/auth/pages/LoginPage";
+
+import { TeacherReviewDetailPage } from "./features/teacherReviews/pages/TeacherReviewDetailPage";
+
 import { LandingPage } from "./pages/LandingPage";
+
 import {
   ProblemBankPage,
   type ProblemProgressState,
 } from "./pages/ProblemBankPage";
+
 import { ProblemDetailPage } from "./pages/ProblemDetailPage";
 import { StudentSessionPage } from "./pages/StudentSessionPage";
 import { TeacherAttemptDetailPage } from "./pages/TeacherAttemptDetailPage";
@@ -13,7 +30,9 @@ import { TeacherAttemptsPage } from "./pages/TeacherAttemptsPage";
 import { TeacherDashboardPage } from "./pages/TeacherDashboardPage";
 import { TeacherProblemAnalyticsPage } from "./pages/TeacherProblemAnalyticsPage";
 import { TeacherStudentHistoryPage } from "./pages/TeacherStudentHistoryPage";
+
 import type { StudentSessionResponse } from "./types/student";
+
 
 type AppView =
   | "landing"
@@ -26,14 +45,21 @@ type AppView =
   | "teacher-student-history"
   | "teacher-problem-analytics";
 
+
 type ProblemProgressMap = Record<
   string,
   ProblemProgressState
 >;
 
-const SESSION_STORAGE_KEY = "studentSession";
-const VIEW_STORAGE_KEY = "studentAppView";
-const SELECTED_PROBLEM_STORAGE_KEY = "selectedProblemId";
+
+const SESSION_STORAGE_KEY =
+  "studentSession";
+
+const VIEW_STORAGE_KEY =
+  "studentAppView";
+
+const SELECTED_PROBLEM_STORAGE_KEY =
+  "selectedProblemId";
 
 const SELECTED_TEACHER_ATTEMPT_STORAGE_KEY =
   "selectedTeacherAttemptId";
@@ -44,13 +70,17 @@ const SELECTED_TEACHER_STUDENT_STORAGE_KEY =
 const SELECTED_TEACHER_PROBLEM_STORAGE_KEY =
   "selectedTeacherProblemId";
 
+
 function getProgressStorageKey(
-  sessionId: string
+  sessionId: string,
 ): string {
   return `problemProgress:${sessionId}`;
 }
 
-function isTeacherView(view: AppView): boolean {
+
+function isTeacherView(
+  view: AppView,
+): boolean {
   return (
     view === "teacher-dashboard" ||
     view === "teacher-attempts" ||
@@ -60,8 +90,9 @@ function isTeacherView(view: AppView): boolean {
   );
 }
 
+
 function isValidAppView(
-  value: string | null
+  value: string | null,
 ): value is AppView {
   return (
     value === "landing" ||
@@ -76,8 +107,9 @@ function isValidAppView(
   );
 }
 
+
 function readStoredProgress(
-  sessionId: string
+  sessionId: string,
 ): ProblemProgressMap {
   const storageKey =
     getProgressStorageKey(sessionId);
@@ -91,34 +123,46 @@ function readStoredProgress(
 
   try {
     return JSON.parse(
-      storedProgress
+      storedProgress,
     ) as ProblemProgressMap;
   } catch {
     localStorage.removeItem(storageKey);
+
     return {};
   }
 }
 
-function App() {
-  const [session, setSession] =
-    useState<StudentSessionResponse | null>(
-      null
-    );
+
+function AppWorkspace() {
+  const navigate = useNavigate();
+
+  const [
+    session,
+    setSession,
+  ] = useState<StudentSessionResponse | null>(
+    null,
+  );
 
   const [
     selectedProblemId,
     setSelectedProblemId,
-  ] = useState<string | null>(null);
+  ] = useState<string | null>(
+    null,
+  );
 
   const [
     selectedTeacherAttemptId,
     setSelectedTeacherAttemptId,
-  ] = useState<string | null>(null);
+  ] = useState<string | null>(
+    null,
+  );
 
   const [
     selectedTeacherStudentAliasId,
     setSelectedTeacherStudentAliasId,
-  ] = useState<string | null>(null);
+  ] = useState<string | null>(
+    null,
+  );
 
   /*
    * This value serves two purposes:
@@ -133,23 +177,36 @@ function App() {
   const [
     selectedTeacherProblemId,
     setSelectedTeacherProblemId,
-  ] = useState<string | null>(null);
+  ] = useState<string | null>(
+    null,
+  );
 
   const [
     progressByProblemId,
     setProgressByProblemId,
-  ] = useState<ProblemProgressMap>({});
+  ] = useState<ProblemProgressMap>(
+    {},
+  );
 
-  const [view, setView] =
-    useState<AppView>("landing");
+  const [
+    view,
+    setView,
+  ] = useState<AppView>(
+    "landing",
+  );
 
-  const [isHydrated, setIsHydrated] =
-    useState(false);
+  const [
+    isHydrated,
+    setIsHydrated,
+  ] = useState(
+    false,
+  );
+
 
   useEffect(() => {
     const storedView =
       localStorage.getItem(
-        VIEW_STORAGE_KEY
+        VIEW_STORAGE_KEY,
       );
 
     const restoredView: AppView =
@@ -159,32 +216,32 @@ function App() {
 
     const storedTeacherAttemptId =
       localStorage.getItem(
-        SELECTED_TEACHER_ATTEMPT_STORAGE_KEY
+        SELECTED_TEACHER_ATTEMPT_STORAGE_KEY,
       );
 
     const storedTeacherStudentAliasId =
       localStorage.getItem(
-        SELECTED_TEACHER_STUDENT_STORAGE_KEY
+        SELECTED_TEACHER_STUDENT_STORAGE_KEY,
       );
 
     const storedTeacherProblemId =
       localStorage.getItem(
-        SELECTED_TEACHER_PROBLEM_STORAGE_KEY
+        SELECTED_TEACHER_PROBLEM_STORAGE_KEY,
       );
 
     if (isTeacherView(restoredView)) {
       setSelectedProblemId(null);
 
       setSelectedTeacherAttemptId(
-        storedTeacherAttemptId
+        storedTeacherAttemptId,
       );
 
       setSelectedTeacherStudentAliasId(
-        storedTeacherStudentAliasId
+        storedTeacherStudentAliasId,
       );
 
       setSelectedTeacherProblemId(
-        storedTeacherProblemId
+        storedTeacherProblemId,
       );
 
       if (
@@ -192,19 +249,25 @@ function App() {
           "teacher-attempt-detail" &&
         storedTeacherAttemptId
       ) {
-        setView("teacher-attempt-detail");
+        setView(
+          "teacher-attempt-detail",
+        );
       } else if (
         restoredView ===
           "teacher-student-history" &&
         storedTeacherStudentAliasId
       ) {
-        setView("teacher-student-history");
+        setView(
+          "teacher-student-history",
+        );
       } else if (
         restoredView ===
           "teacher-problem-analytics" &&
         storedTeacherProblemId
       ) {
-        setView("teacher-problem-analytics");
+        setView(
+          "teacher-problem-analytics",
+        );
       } else if (
         restoredView ===
           "teacher-attempt-detail" ||
@@ -213,103 +276,154 @@ function App() {
         restoredView ===
           "teacher-problem-analytics"
       ) {
-        setSelectedTeacherAttemptId(null);
-        setSelectedTeacherStudentAliasId(null);
-        setView("teacher-attempts");
+        setSelectedTeacherAttemptId(
+          null,
+        );
+
+        setSelectedTeacherStudentAliasId(
+          null,
+        );
+
+        setView(
+          "teacher-attempts",
+        );
       } else {
-        setView(restoredView);
+        setView(
+          restoredView,
+        );
       }
 
-      setIsHydrated(true);
+      setIsHydrated(
+        true,
+      );
+
       return;
     }
 
     const storedSession =
       localStorage.getItem(
-        SESSION_STORAGE_KEY
+        SESSION_STORAGE_KEY,
       );
 
     if (!storedSession) {
       setView(
-        restoredView === "student-session"
+        restoredView ===
+          "student-session"
           ? "student-session"
-          : "landing"
+          : "landing",
       );
 
-      setIsHydrated(true);
+      setIsHydrated(
+        true,
+      );
+
       return;
     }
 
     try {
-      const parsedSession = JSON.parse(
-        storedSession
-      ) as StudentSessionResponse;
+      const parsedSession =
+        JSON.parse(
+          storedSession,
+        ) as StudentSessionResponse;
 
       const storedProblemId =
         localStorage.getItem(
-          SELECTED_PROBLEM_STORAGE_KEY
+          SELECTED_PROBLEM_STORAGE_KEY,
         );
 
       const restoredProgress =
         readStoredProgress(
-          parsedSession.student_alias_id
+          parsedSession.student_alias_id,
         );
 
-      setSession(parsedSession);
+      setSession(
+        parsedSession,
+      );
 
       setProgressByProblemId(
-        restoredProgress
+        restoredProgress,
       );
 
       if (
         storedProblemId &&
-        restoredView === "problem-detail"
+        restoredView ===
+          "problem-detail"
       ) {
         setSelectedProblemId(
-          storedProblemId
+          storedProblemId,
         );
 
-        setView("problem-detail");
+        setView(
+          "problem-detail",
+        );
       } else {
-        setSelectedProblemId(null);
-        setView("problem-bank");
+        setSelectedProblemId(
+          null,
+        );
+
+        setView(
+          "problem-bank",
+        );
       }
     } catch {
       localStorage.removeItem(
-        SESSION_STORAGE_KEY
+        SESSION_STORAGE_KEY,
       );
 
       localStorage.removeItem(
-        VIEW_STORAGE_KEY
+        VIEW_STORAGE_KEY,
       );
 
       localStorage.removeItem(
-        SELECTED_PROBLEM_STORAGE_KEY
+        SELECTED_PROBLEM_STORAGE_KEY,
       );
 
       localStorage.removeItem(
-        SELECTED_TEACHER_ATTEMPT_STORAGE_KEY
+        SELECTED_TEACHER_ATTEMPT_STORAGE_KEY,
       );
 
       localStorage.removeItem(
-        SELECTED_TEACHER_STUDENT_STORAGE_KEY
+        SELECTED_TEACHER_STUDENT_STORAGE_KEY,
       );
 
       localStorage.removeItem(
-        SELECTED_TEACHER_PROBLEM_STORAGE_KEY
+        SELECTED_TEACHER_PROBLEM_STORAGE_KEY,
       );
 
-      setSession(null);
-      setSelectedProblemId(null);
-      setSelectedTeacherAttemptId(null);
-      setSelectedTeacherStudentAliasId(null);
-      setSelectedTeacherProblemId(null);
-      setProgressByProblemId({});
-      setView("landing");
+      setSession(
+        null,
+      );
+
+      setSelectedProblemId(
+        null,
+      );
+
+      setSelectedTeacherAttemptId(
+        null,
+      );
+
+      setSelectedTeacherStudentAliasId(
+        null,
+      );
+
+      setSelectedTeacherProblemId(
+        null,
+      );
+
+      setProgressByProblemId(
+        {},
+      );
+
+      setView(
+        "landing",
+      );
     } finally {
-      setIsHydrated(true);
+      setIsHydrated(
+        true,
+      );
     }
   }, []);
+
 
   useEffect(() => {
     if (!isHydrated) {
@@ -318,9 +432,13 @@ function App() {
 
     localStorage.setItem(
       VIEW_STORAGE_KEY,
-      view
+      view,
     );
-  }, [isHydrated, view]);
+  }, [
+    isHydrated,
+    view,
+  ]);
+
 
   useEffect(() => {
     if (!isHydrated) {
@@ -330,17 +448,18 @@ function App() {
     if (selectedProblemId) {
       localStorage.setItem(
         SELECTED_PROBLEM_STORAGE_KEY,
-        selectedProblemId
+        selectedProblemId,
       );
     } else {
       localStorage.removeItem(
-        SELECTED_PROBLEM_STORAGE_KEY
+        SELECTED_PROBLEM_STORAGE_KEY,
       );
     }
   }, [
     isHydrated,
     selectedProblemId,
   ]);
+
 
   useEffect(() => {
     if (!isHydrated) {
@@ -350,11 +469,11 @@ function App() {
     if (selectedTeacherAttemptId) {
       localStorage.setItem(
         SELECTED_TEACHER_ATTEMPT_STORAGE_KEY,
-        selectedTeacherAttemptId
+        selectedTeacherAttemptId,
       );
     } else {
       localStorage.removeItem(
-        SELECTED_TEACHER_ATTEMPT_STORAGE_KEY
+        SELECTED_TEACHER_ATTEMPT_STORAGE_KEY,
       );
     }
   }, [
@@ -362,25 +481,29 @@ function App() {
     selectedTeacherAttemptId,
   ]);
 
+
   useEffect(() => {
     if (!isHydrated) {
       return;
     }
 
-    if (selectedTeacherStudentAliasId) {
+    if (
+      selectedTeacherStudentAliasId
+    ) {
       localStorage.setItem(
         SELECTED_TEACHER_STUDENT_STORAGE_KEY,
-        selectedTeacherStudentAliasId
+        selectedTeacherStudentAliasId,
       );
     } else {
       localStorage.removeItem(
-        SELECTED_TEACHER_STUDENT_STORAGE_KEY
+        SELECTED_TEACHER_STUDENT_STORAGE_KEY,
       );
     }
   }, [
     isHydrated,
     selectedTeacherStudentAliasId,
   ]);
+
 
   useEffect(() => {
     if (!isHydrated) {
@@ -390,11 +513,11 @@ function App() {
     if (selectedTeacherProblemId) {
       localStorage.setItem(
         SELECTED_TEACHER_PROBLEM_STORAGE_KEY,
-        selectedTeacherProblemId
+        selectedTeacherProblemId,
       );
     } else {
       localStorage.removeItem(
-        SELECTED_TEACHER_PROBLEM_STORAGE_KEY
+        SELECTED_TEACHER_PROBLEM_STORAGE_KEY,
       );
     }
   }, [
@@ -402,18 +525,22 @@ function App() {
     selectedTeacherProblemId,
   ]);
 
+
   useEffect(() => {
-    if (!isHydrated || !session) {
+    if (
+      !isHydrated ||
+      !session
+    ) {
       return;
     }
 
     localStorage.setItem(
       getProgressStorageKey(
-        session.student_alias_id
+        session.student_alias_id,
       ),
       JSON.stringify(
-        progressByProblemId
-      )
+        progressByProblemId,
+      ),
     );
   }, [
     isHydrated,
@@ -421,11 +548,21 @@ function App() {
     session,
   ]);
 
+
   function clearTeacherSelection(): void {
-    setSelectedTeacherAttemptId(null);
-    setSelectedTeacherStudentAliasId(null);
-    setSelectedTeacherProblemId(null);
+    setSelectedTeacherAttemptId(
+      null,
+    );
+
+    setSelectedTeacherStudentAliasId(
+      null,
+    );
+
+    setSelectedTeacherProblemId(
+      null,
+    );
   }
+
 
   function clearTeacherRecordSelection(): void {
     /*
@@ -435,21 +572,41 @@ function App() {
      * teacher returns from attempt detail to the
      * related attempts list.
      */
-    setSelectedTeacherAttemptId(null);
-    setSelectedTeacherStudentAliasId(null);
+    setSelectedTeacherAttemptId(
+      null,
+    );
+
+    setSelectedTeacherStudentAliasId(
+      null,
+    );
   }
+
 
   function handleStartStudent(): void {
-    setSelectedProblemId(null);
+    setSelectedProblemId(
+      null,
+    );
+
     clearTeacherSelection();
-    setView("student-session");
+
+    setView(
+      "student-session",
+    );
   }
 
+
   function handleStartTeacher(): void {
-    setSelectedProblemId(null);
+    setSelectedProblemId(
+      null,
+    );
+
     clearTeacherSelection();
-    setView("teacher-dashboard");
+
+    setView(
+      "teacher-dashboard",
+    );
   }
+
 
   function handleOpenTeacherAttempts(): void {
     /*
@@ -457,86 +614,138 @@ function App() {
      * show every attempt, with no problem filter.
      */
     clearTeacherSelection();
-    setView("teacher-attempts");
+
+    setView(
+      "teacher-attempts",
+    );
   }
 
+
   function handleOpenRelatedTeacherAttempts(
-    problemId: string
+    problemId: string,
   ): void {
     /*
      * Opening from problem analytics means:
      * retain the problem ID and pass it into
      * TeacherAttemptsPage as initialProblemId.
      */
-    setSelectedTeacherAttemptId(null);
-    setSelectedTeacherStudentAliasId(null);
-    setSelectedTeacherProblemId(problemId);
-    setView("teacher-attempts");
+    setSelectedTeacherAttemptId(
+      null,
+    );
+
+    setSelectedTeacherStudentAliasId(
+      null,
+    );
+
+    setSelectedTeacherProblemId(
+      problemId,
+    );
+
+    setView(
+      "teacher-attempts",
+    );
   }
+
 
   function handleOpenTeacherAttempt(
-    attemptId: string
+    attemptId: string,
   ): void {
     /*
-     * Do not clear selectedTeacherProblemId here.
-     * It may contain the active related-attempts
-     * filter that must be restored on Back.
+     * Keep this stored so the existing teacher
+     * pages can still restore the current record.
      */
     setSelectedTeacherAttemptId(
-      attemptId
+      attemptId,
     );
 
-    setView("teacher-attempt-detail");
+    localStorage.setItem(
+      SELECTED_TEACHER_ATTEMPT_STORAGE_KEY,
+      attemptId,
+    );
+
+    /*
+     * The new Teacher Review workflow is a real
+     * URL route because TeacherReviewDetailPage
+     * uses useParams() and useNavigate().
+     */
+    navigate(
+      `/teacher/reviews/${encodeURIComponent(
+        attemptId,
+      )}`,
+    );
   }
+
 
   function handleOpenStudentHistory(
-    studentAliasId: string
+    studentAliasId: string,
   ): void {
     setSelectedTeacherStudentAliasId(
-      studentAliasId
+      studentAliasId,
     );
 
-    setView("teacher-student-history");
+    setView(
+      "teacher-student-history",
+    );
   }
+
 
   function handleOpenProblemAnalytics(
-    problemId: string
+    problemId: string,
   ): void {
     setSelectedTeacherProblemId(
-      problemId
+      problemId,
     );
 
-    setView("teacher-problem-analytics");
+    setView(
+      "teacher-problem-analytics",
+    );
   }
+
 
   function handleBackToTeacherAttempts(): void {
-    /*
-     * Clear the selected record but retain the
-     * selected problem filter.
-     */
     clearTeacherRecordSelection();
-    setView("teacher-attempts");
+
+    setView(
+      "teacher-attempts",
+    );
   }
+
 
   function handleBackFromStudentHistory(): void {
-    setSelectedTeacherStudentAliasId(null);
+    setSelectedTeacherStudentAliasId(
+      null,
+    );
 
     if (selectedTeacherAttemptId) {
-      setView("teacher-attempt-detail");
+      setView(
+        "teacher-attempt-detail",
+      );
+
       return;
     }
 
-    setView("teacher-attempts");
+    setView(
+      "teacher-attempts",
+    );
   }
 
+
   function handleBackFromProblemAnalytics(): void {
-    if (selectedTeacherStudentAliasId) {
-      setView("teacher-student-history");
+    if (
+      selectedTeacherStudentAliasId
+    ) {
+      setView(
+        "teacher-student-history",
+      );
+
       return;
     }
 
     if (selectedTeacherAttemptId) {
-      setView("teacher-attempt-detail");
+      setView(
+        "teacher-attempt-detail",
+      );
+
       return;
     }
 
@@ -545,43 +754,62 @@ function App() {
      * attempts page can restore the problem
      * filter when returning from analytics.
      */
-    setView("teacher-attempts");
+    setView(
+      "teacher-attempts",
+    );
   }
+
 
   function handleBackToTeacherDashboard(): void {
     clearTeacherSelection();
-    setView("teacher-dashboard");
+
+    setView(
+      "teacher-dashboard",
+    );
   }
 
+
   function handleSessionCreated(
-    newSession: StudentSessionResponse
+    newSession: StudentSessionResponse,
   ): void {
     localStorage.setItem(
       SESSION_STORAGE_KEY,
-      JSON.stringify(newSession)
+      JSON.stringify(
+        newSession,
+      ),
     );
 
-    setSession(newSession);
-    setSelectedProblemId(null);
+    setSession(
+      newSession,
+    );
+
+    setSelectedProblemId(
+      null,
+    );
+
     clearTeacherSelection();
 
     setProgressByProblemId(
       readStoredProgress(
-        newSession.student_alias_id
-      )
+        newSession.student_alias_id,
+      ),
     );
 
-    setView("problem-bank");
+    setView(
+      "problem-bank",
+    );
   }
 
+
   function handleProblemSelected(
-    problemId: string
+    problemId: string,
   ): void {
     setProgressByProblemId(
       (currentProgress) => {
         const existingProgress =
-          currentProgress[problemId] ??
-          "not_started";
+          currentProgress[
+            problemId
+          ] ?? "not_started";
 
         if (
           existingProgress !==
@@ -592,65 +820,98 @@ function App() {
 
         return {
           ...currentProgress,
-          [problemId]: "in_progress",
+          [problemId]:
+            "in_progress",
         };
-      }
+      },
     );
 
-    setSelectedProblemId(problemId);
-    setView("problem-detail");
+    setSelectedProblemId(
+      problemId,
+    );
+
+    setView(
+      "problem-detail",
+    );
   }
+
 
   function handleBackToProblemBank(): void {
-    setSelectedProblemId(null);
-    setView("problem-bank");
+    setSelectedProblemId(
+      null,
+    );
+
+    setView(
+      "problem-bank",
+    );
   }
 
+
   function handleBackToLanding(): void {
-    setSelectedProblemId(null);
+    setSelectedProblemId(
+      null,
+    );
+
     clearTeacherSelection();
-    setView("landing");
+
+    setView(
+      "landing",
+    );
   }
+
 
   function handleResetSession(): void {
     if (session) {
       localStorage.removeItem(
         getProgressStorageKey(
-          session.student_alias_id
-        )
+          session.student_alias_id,
+        ),
       );
     }
 
     localStorage.removeItem(
-      SESSION_STORAGE_KEY
+      SESSION_STORAGE_KEY,
     );
 
     localStorage.removeItem(
-      VIEW_STORAGE_KEY
+      VIEW_STORAGE_KEY,
     );
 
     localStorage.removeItem(
-      SELECTED_PROBLEM_STORAGE_KEY
+      SELECTED_PROBLEM_STORAGE_KEY,
     );
 
     localStorage.removeItem(
-      SELECTED_TEACHER_ATTEMPT_STORAGE_KEY
+      SELECTED_TEACHER_ATTEMPT_STORAGE_KEY,
     );
 
     localStorage.removeItem(
-      SELECTED_TEACHER_STUDENT_STORAGE_KEY
+      SELECTED_TEACHER_STUDENT_STORAGE_KEY,
     );
 
     localStorage.removeItem(
-      SELECTED_TEACHER_PROBLEM_STORAGE_KEY
+      SELECTED_TEACHER_PROBLEM_STORAGE_KEY,
     );
 
-    setSession(null);
-    setSelectedProblemId(null);
+    setSession(
+      null,
+    );
+
+    setSelectedProblemId(
+      null,
+    );
+
     clearTeacherSelection();
-    setProgressByProblemId({});
-    setView("landing");
+
+    setProgressByProblemId(
+      {},
+    );
+
+    setView(
+      "landing",
+    );
   }
+
 
   if (!isHydrated) {
     return (
@@ -661,6 +922,7 @@ function App() {
       </main>
     );
   }
+
 
   if (view === "landing") {
     return (
@@ -675,10 +937,16 @@ function App() {
     );
   }
 
-  if (view === "teacher-dashboard") {
+
+  if (
+    view ===
+    "teacher-dashboard"
+  ) {
     return (
       <TeacherDashboardPage
-        onBack={handleBackToLanding}
+        onBack={
+          handleBackToLanding
+        }
         onOpenAttempts={
           handleOpenTeacherAttempts
         }
@@ -686,7 +954,11 @@ function App() {
     );
   }
 
-  if (view === "teacher-attempts") {
+
+  if (
+    view ===
+    "teacher-attempts"
+  ) {
     return (
       <TeacherAttemptsPage
         onBack={
@@ -709,6 +981,12 @@ function App() {
     );
   }
 
+
+  /*
+   * Legacy detail view retained for users whose
+   * previous localStorage still contains the old
+   * teacher-attempt-detail view.
+   */
   if (
     view ===
       "teacher-attempt-detail" &&
@@ -731,6 +1009,7 @@ function App() {
       />
     );
   }
+
 
   if (
     view ===
@@ -755,6 +1034,7 @@ function App() {
     );
   }
 
+
   if (
     view ===
       "teacher-problem-analytics" &&
@@ -775,14 +1055,18 @@ function App() {
     );
   }
 
+
   /*
    * Recovery fallback for an invalid or missing
    * teacher record selection.
    */
   if (
-    view === "teacher-attempt-detail" ||
-    view === "teacher-student-history" ||
-    view === "teacher-problem-analytics"
+    view ===
+      "teacher-attempt-detail" ||
+    view ===
+      "teacher-student-history" ||
+    view ===
+      "teacher-problem-analytics"
   ) {
     return (
       <TeacherAttemptsPage
@@ -806,7 +1090,11 @@ function App() {
     );
   }
 
-  if (view === "student-session") {
+
+  if (
+    view ===
+    "student-session"
+  ) {
     return (
       <StudentSessionPage
         onSessionCreated={
@@ -815,6 +1103,7 @@ function App() {
       />
     );
   }
+
 
   if (!session) {
     return (
@@ -829,14 +1118,20 @@ function App() {
     );
   }
 
+
   if (
-    view === "problem-detail" &&
+    view ===
+      "problem-detail" &&
     selectedProblemId
   ) {
     return (
       <ProblemDetailPage
-        problemId={selectedProblemId}
-        session={session}
+        problemId={
+          selectedProblemId
+        }
+        session={
+          session
+        }
         onBack={
           handleBackToProblemBank
         }
@@ -844,9 +1139,12 @@ function App() {
     );
   }
 
+
   return (
     <ProblemBankPage
-      session={session}
+      session={
+        session
+      }
       progressByProblemId={
         progressByProblemId
       }
@@ -859,5 +1157,36 @@ function App() {
     />
   );
 }
+
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/teacher/login"
+          element={
+            <LoginPage />
+          }
+        />
+
+        <Route
+          path="/teacher/reviews/:attemptId"
+          element={
+            <TeacherReviewDetailPage />
+          }
+        />
+
+        <Route
+          path="*"
+          element={
+            <AppWorkspace />
+          }
+        />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
 
 export default App;
