@@ -8,6 +8,19 @@ import {
 import { createDiagnosisFromAttempt } from "../services/diagnosisApi";
 import type { DiagnosisResponse } from "../types/diagnosis";
 
+import DiagnosticQuestionPanel from "../features/interventions/components/DiagnosticQuestionPanel";
+import EvolutionBadge from "../features/interventions/components/EvolutionBadge";
+import HintPanel from "../features/interventions/components/HintPanel";
+import RetryPanel from "../features/interventions/components/RetryPanel";
+import {
+  recordMisconceptionEvolution,
+} from "../features/interventions/api";
+import type {
+  DiagnosticResponseResult,
+  MisconceptionEvolutionResponse,
+  RetryAttemptResponse,
+} from "../features/interventions/types";
+
 type AttemptSubmissionFormProps = {
   studentAliasId: string;
   problemId: string;
@@ -265,6 +278,24 @@ export default function AttemptSubmissionForm({
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosisError, setDiagnosisError] = useState<string | null>(null);
 
+  const [diagnosticResponse, setDiagnosticResponse] =
+    useState<DiagnosticResponseResult | null>(null);
+
+  const [retryAttempt, setRetryAttempt] =
+    useState<RetryAttemptResponse | null>(null);
+
+  const [retryDiagnosis, setRetryDiagnosis] =
+    useState<DiagnosisResponse | null>(null);
+
+  const [retryDiagnosing, setRetryDiagnosing] =
+    useState(false);
+
+  const [retryDiagnosisError, setRetryDiagnosisError] =
+    useState<string | null>(null);
+
+  const [evolution, setEvolution] =
+    useState<MisconceptionEvolutionResponse | null>(null);
+
   useEffect(() => {
     setSelectedLanguage(normalizeLanguage(expectedLanguage));
     setFinalAnswer("");
@@ -274,9 +305,14 @@ export default function AttemptSubmissionForm({
 
     setSubmittedAttempt(null);
     setDiagnosis(null);
+    setDiagnosticResponse(null);
+    setRetryAttempt(null);
+    setRetryDiagnosis(null);
+    setEvolution(null);
 
     setSubmissionError(null);
     setDiagnosisError(null);
+    setRetryDiagnosisError(null);
 
     setStartedAt(Date.now());
     setElapsedSeconds(1);
@@ -338,7 +374,12 @@ export default function AttemptSubmissionForm({
 
     setSubmissionError(null);
     setDiagnosisError(null);
+    setRetryDiagnosisError(null);
     setDiagnosis(null);
+    setDiagnosticResponse(null);
+    setRetryAttempt(null);
+    setRetryDiagnosis(null);
+    setEvolution(null);
 
     if (!hasRequiredReasoning) {
       setSubmissionError(
@@ -408,12 +449,81 @@ export default function AttemptSubmissionForm({
     }
   }
 
+  function handleDiagnosticResponseSubmitted(
+    response: DiagnosticResponseResult
+  ) {
+    setDiagnosticResponse(response);
+    onProgressChangedSafely();
+  }
+
+  function handleRetryCreated(
+    retry: RetryAttemptResponse
+  ) {
+    setRetryAttempt(retry);
+    setRetryDiagnosis(null);
+    setEvolution(null);
+    setRetryDiagnosisError(null);
+    onProgressChangedSafely();
+  }
+
+  async function handleGenerateRetryDiagnosis() {
+    if (
+      !retryAttempt ||
+      retryDiagnosing ||
+      retryDiagnosis
+    ) {
+      return;
+    }
+
+    try {
+      setRetryDiagnosing(true);
+      setRetryDiagnosisError(null);
+
+      const generatedDiagnosis =
+        await createDiagnosisFromAttempt(
+          retryAttempt.id
+        );
+
+      setRetryDiagnosis(
+        generatedDiagnosis
+      );
+
+      const recordedEvolution =
+        await recordMisconceptionEvolution(
+          generatedDiagnosis.id
+        );
+
+      setEvolution(
+        recordedEvolution
+      );
+
+      onProgressChangedSafely();
+    } catch (error) {
+      setRetryDiagnosisError(
+        error instanceof Error
+          ? error.message
+          : "Retry diagnosis generation failed."
+      );
+    } finally {
+      setRetryDiagnosing(false);
+    }
+  }
+
+  function onProgressChangedSafely() {
+    onDiagnosisGenerated?.();
+  }
+
   function handleSubmitAnotherAttempt() {
     setSubmittedAttempt(null);
     setDiagnosis(null);
+    setDiagnosticResponse(null);
+    setRetryAttempt(null);
+    setRetryDiagnosis(null);
+    setEvolution(null);
 
     setSubmissionError(null);
     setDiagnosisError(null);
+    setRetryDiagnosisError(null);
 
     setFinalAnswer("");
     setWrittenReasoning("");
@@ -619,6 +729,165 @@ export default function AttemptSubmissionForm({
 
             {diagnosis.decision_reason && (
               <p className="diagnosis-note">{diagnosis.decision_reason}</p>
+            )}
+          </section>
+        )}
+
+        {diagnosis?.next_action === "show_hint" && (
+          <HintPanel
+            diagnosisId={diagnosis.id}
+            studentAliasId={studentAliasId}
+            misconceptionCode={
+              diagnosis.primary_misconception?.code
+            }
+            misconceptionName={
+              diagnosis.primary_misconception?.name
+            }
+            onHintRevealed={() => {
+              onProgressChangedSafely();
+            }}
+          />
+        )}
+
+        {diagnosis?.next_action ===
+          "ask_diagnostic_question" && (
+          <DiagnosticQuestionPanel
+            diagnosisId={diagnosis.id}
+            studentAliasId={studentAliasId}
+            misconceptionCode={
+              diagnosis.primary_misconception?.code
+            }
+            misconceptionName={
+              diagnosis.primary_misconception?.name
+            }
+            onResponseSubmitted={
+              handleDiagnosticResponseSubmitted
+            }
+          />
+        )}
+
+        {diagnosis?.next_action ===
+          "ask_clarification" && (
+          <section className="intervention-card clarification-panel">
+            <p className="section-kicker">
+              Clarification required
+            </p>
+
+            <h3>
+              Add clearer reasoning before the system commits.
+            </h3>
+
+            <p>
+              Explain the key assumption, stopping condition,
+              data-structure rule, or memory behavior that supports
+              your answer. Then submit a linked retry.
+            </p>
+          </section>
+        )}
+
+        {diagnosis && (
+          <RetryPanel
+            parentAttemptId={activeAttemptId}
+            studentAliasId={studentAliasId}
+            defaultLanguage={
+              submittedAttempt?.selected_language ??
+              selectedLanguage
+            }
+            initialFinalAnswer={finalAnswer}
+            initialWrittenReasoning={writtenReasoning}
+            initialSourceCode={sourceCode}
+            initialSpeechTranscript={speechTranscript}
+            onRetryCreated={handleRetryCreated}
+          />
+        )}
+
+        {retryAttempt && (
+          <section className="intervention-card retry-diagnosis-panel">
+            <div className="intervention-card-header">
+              <div>
+                <p className="section-kicker">
+                  Retry diagnosis
+                </p>
+
+                <h3>
+                  Diagnose the linked retry
+                </h3>
+
+                <p>
+                  This creates a fresh diagnosis and records how the
+                  misconception changed from the parent attempt.
+                </p>
+              </div>
+
+              {evolution && (
+                <EvolutionBadge
+                  state={evolution.evolution_state}
+                  compact
+                />
+              )}
+            </div>
+
+            {!retryDiagnosis && (
+              <button
+                className="primary-button"
+                type="button"
+                onClick={handleGenerateRetryDiagnosis}
+                disabled={retryDiagnosing}
+              >
+                {retryDiagnosing
+                  ? "Diagnosing retry..."
+                  : "Generate retry diagnosis"}
+              </button>
+            )}
+
+            {retryDiagnosisError && (
+              <div className="attempt-error" role="alert">
+                {retryDiagnosisError}
+              </div>
+            )}
+
+            {retryDiagnosis && (
+              <div className="retry-diagnosis-summary">
+                <div>
+                  <span>State</span>
+                  <strong>
+                    {getDiagnosisStateLabel(
+                      retryDiagnosis.state
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Confidence</span>
+                  <strong>
+                    {formatConfidence(
+                      retryDiagnosis.confidence
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Misconception</span>
+                  <strong>
+                    {retryDiagnosis.primary_misconception?.code ??
+                      "None"}
+                  </strong>
+                </div>
+              </div>
+            )}
+
+            {evolution && (
+              <EvolutionBadge
+                state={evolution.evolution_state}
+                showDescription
+              />
+            )}
+
+            {diagnosticResponse && (
+              <p className="diagnosis-note">
+                Diagnostic response saved: additional evidence is
+                available for the learning record.
+              </p>
             )}
           </section>
         )}

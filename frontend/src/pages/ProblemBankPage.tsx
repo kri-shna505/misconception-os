@@ -15,8 +15,7 @@ interface ProblemBankPageProps {
   onResetSession: () => void;
 
   /**
-   * Optional for now.
-   * App.tsx will later provide the current progress for each problem.
+   * Current attempt and diagnosis progress keyed by problem ID.
    */
   progressByProblemId?: Record<string, ProblemProgressState>;
 }
@@ -69,7 +68,7 @@ function getProblemMeta(problem: ProblemListItem): ProblemMeta {
       focus: "Pass-by-value vs reference",
       summary:
         "Checks confusion between local variable changes and caller-visible changes.",
-      availability: "Preview",
+      availability: "Available",
     };
   }
 
@@ -79,7 +78,7 @@ function getProblemMeta(problem: ProblemListItem): ProblemMeta {
       focus: "Stack vs heap reasoning",
       summary:
         "Checks misunderstanding of stack frames, heap objects, and memory behavior.",
-      availability: "Preview",
+      availability: "Available",
     };
   }
 
@@ -88,7 +87,10 @@ function getProblemMeta(problem: ProblemListItem): ProblemMeta {
     focus: "Diagnostic focus not configured",
     summary:
       "This seeded problem is available for student attempt collection.",
-    availability: "Preview",
+    availability:
+      problem.active === false
+        ? "Preview"
+        : "Available",
   };
 }
 
@@ -195,7 +197,7 @@ export function ProblemBankPage({
       }
     }
 
-    loadProblems();
+    void loadProblems();
 
     return () => {
       isMounted = false;

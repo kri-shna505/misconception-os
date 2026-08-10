@@ -13,6 +13,9 @@ from app.models.attempt import Attempt
 from app.models.diagnosis import Diagnosis
 from app.models.diagnosis_alternative import DiagnosisAlternative
 from app.models.diagnosis_evidence import DiagnosisEvidence
+from app.models.diagnostic_response import DiagnosticResponse
+from app.models.hint_event import HintEvent
+from app.models.misconception_evolution import MisconceptionEvolution
 from app.models.misconception import Misconception
 from app.models.problem import Problem
 from app.models.problem_misconception import ProblemMisconception
@@ -176,97 +179,268 @@ def list_teacher_attempts(
 ) -> TeacherAttemptListResponse:
     """
     Return the teacher attempt-review list with filtering and pagination.
+
+    Pagination is attempt-centric. This prevents one attempt from appearing
+    multiple times after Sprint 9 diagnostic-question re-evaluation creates
+    additional immutable diagnosis snapshots.
     """
 
-    page, page_size = _normalize_pagination(page, page_size)
+    page, page_size = _normalize_pagination(
+        page,
+        page_size,
+    )
 
     query = (
         db.query(
             Attempt,
             StudentAlias,
             Problem,
-            Diagnosis,
-            Misconception,
-            TeacherReview,
         )
         .join(
             StudentAlias,
-            StudentAlias.id == Attempt.student_alias_id,
+            StudentAlias.id
+            == Attempt.student_alias_id,
         )
         .join(
             Problem,
-            Problem.id == Attempt.problem_id,
-        )
-        .outerjoin(
-            Diagnosis,
-            Diagnosis.attempt_id == Attempt.id,
-        )
-        .outerjoin(
-            Misconception,
-            Misconception.id == Diagnosis.primary_misconception_id,
-        )
-        .outerjoin(
-            TeacherReview,
-            TeacherReview.attempt_id == Attempt.id,
+            Problem.id
+            == Attempt.problem_id,
         )
     )
 
     if student_alias_id is not None:
         query = query.filter(
-            Attempt.student_alias_id == student_alias_id
+            Attempt.student_alias_id
+            == student_alias_id
         )
 
     if problem_id is not None:
-        query = query.filter(Attempt.problem_id == problem_id)
-
-    if diagnosis_state is not None:
-        query = query.filter(Diagnosis.state == diagnosis_state.value)
-
-    if misconception_code:
-        normalized_code = misconception_code.strip().upper()
-        query = query.filter(Misconception.code == normalized_code)
+        query = query.filter(
+            Attempt.problem_id
+            == problem_id
+        )
 
     if created_from is not None:
-        query = query.filter(Attempt.created_at >= created_from)
+        query = query.filter(
+            Attempt.created_at
+            >= created_from
+        )
 
     if created_to is not None:
-        query = query.filter(Attempt.created_at <= created_to)
+        query = query.filter(
+            Attempt.created_at
+            <= created_to
+        )
 
     if search:
-        normalized_search = f"%{search.strip()}%"
+        normalized_search = (
+            f"%{search.strip()}%"
+        )
+
         query = query.filter(
             or_(
-                StudentAlias.alias.ilike(normalized_search),
-                StudentAlias.pseudonymous_id.ilike(normalized_search),
-                Problem.code.ilike(normalized_search),
-                Problem.title.ilike(normalized_search),
-                Misconception.code.ilike(normalized_search),
-                Misconception.name.ilike(normalized_search),
+                StudentAlias.alias.ilike(
+                    normalized_search
+                ),
+                StudentAlias.pseudonymous_id.ilike(
+                    normalized_search
+                ),
+                Problem.code.ilike(
+                    normalized_search
+                ),
+                Problem.title.ilike(
+                    normalized_search
+                ),
             )
         )
 
-    total_items = query.count()
-
-    rows = (
-        query.order_by(Attempt.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+    candidate_rows = (
+        query.order_by(
+            Attempt.created_at.desc(),
+            Attempt.id.desc(),
+        )
         .all()
     )
 
+    candidate_attempt_ids = [
+        attempt.id
+        for (
+            attempt,
+            _,
+            _,
+        ) in candidate_rows
+    ]
+
+    latest_diagnoses = (
+        _get_latest_diagnoses_by_attempt(
+            db=db,
+            attempt_ids=candidate_attempt_ids,
+        )
+    )
+
+    misconception_by_id: dict[
+        UUID,
+        Misconception,
+    ] = {}
+
+    misconception_ids = {
+        diagnosis.primary_misconception_id
+        for diagnosis in latest_diagnoses.values()
+        if (
+            diagnosis.primary_misconception_id
+            is not None
+        )
+    }
+
+    if misconception_ids:
+        misconception_by_id = {
+            item.id: item
+            for item in (
+                db.query(
+                    Misconception
+                )
+                .filter(
+                    Misconception.id.in_(
+                        misconception_ids
+                    )
+                )
+                .all()
+            )
+        }
+
+    filtered_rows: list[
+        tuple[
+            Attempt,
+            StudentAlias,
+            Problem,
+        ]
+    ] = []
+
+    normalized_code = (
+        misconception_code
+        .strip()
+        .upper()
+        if misconception_code
+        else None
+    )
+
+    for (
+        attempt,
+        student,
+        problem,
+    ) in candidate_rows:
+        diagnosis = (
+            latest_diagnoses.get(
+                attempt.id
+            )
+        )
+
+        if (
+            diagnosis_state
+            is not None
+            and (
+                diagnosis is None
+                or diagnosis.state
+                != diagnosis_state.value
+            )
+        ):
+            continue
+
+        if normalized_code:
+            if (
+                diagnosis is None
+                or diagnosis.primary_misconception_id
+                is None
+            ):
+                continue
+
+            misconception = (
+                misconception_by_id.get(
+                    diagnosis.primary_misconception_id
+                )
+            )
+
+            if (
+                misconception is None
+                or misconception.code
+                .strip()
+                .upper()
+                != normalized_code
+            ):
+                continue
+
+        filtered_rows.append(
+            (
+                attempt,
+                student,
+                problem,
+            )
+        )
+
+    total_items = len(
+        filtered_rows
+    )
+
+    page_rows = filtered_rows[
+        (page - 1) * page_size:
+        page * page_size
+    ]
+
+    page_attempt_ids = [
+        attempt.id
+        for (
+            attempt,
+            _,
+            _,
+        ) in page_rows
+    ]
+
+    reviews_by_attempt = {
+        review.attempt_id: review
+        for review in (
+            db.query(
+                TeacherReview
+            )
+            .filter(
+                TeacherReview.attempt_id.in_(
+                    page_attempt_ids
+                )
+            )
+            .all()
+            if page_attempt_ids
+            else []
+        )
+    }
+
     items = [
         TeacherAttemptListItem(
-            attempt=_attempt_summary(attempt),
-            student=_student_summary(student),
-            problem=_problem_list_item(problem),
+            attempt=_attempt_summary(
+                attempt
+            ),
+            student=_student_summary(
+                student
+            ),
+            problem=_problem_list_item(
+                problem
+            ),
             diagnosis=(
-                _diagnosis_summary(diagnosis)
-                if diagnosis is not None
+                _diagnosis_summary(
+                    latest_diagnoses[
+                        attempt.id
+                    ]
+                )
+                if attempt.id
+                in latest_diagnoses
                 else None
             ),
             review=(
-                TeacherReviewResponse.model_validate(review)
-                if review is not None
+                TeacherReviewResponse.model_validate(
+                    reviews_by_attempt[
+                        attempt.id
+                    ]
+                )
+                if attempt.id
+                in reviews_by_attempt
                 else None
             ),
         )
@@ -274,10 +448,7 @@ def list_teacher_attempts(
             attempt,
             student,
             problem,
-            diagnosis,
-            _,
-            review,
-        ) in rows
+        ) in page_rows
     ]
 
     return TeacherAttemptListResponse(
@@ -349,14 +520,33 @@ def get_student_history(
     page_size: int = 20,
 ) -> StudentHistoryResponse:
     """
-    Return a paginated attempt and diagnosis history for one student.
+    Return a paginated Sprint 9 learning history for one pseudonymous student.
+
+    The history is attempt-centric. An attempt may contain more than one
+    immutable diagnosis snapshot after diagnostic-question re-evaluation, so
+    only the latest diagnosis is used as the current display state while hint
+    usage and question-response activity are aggregated across the attempt.
+
+    Each history item exposes, where supported by the response schema:
+
+    - parent_attempt_id;
+    - retry_number;
+    - revealed hint levels;
+    - whether a diagnostic question was answered;
+    - the latest misconception-evolution state.
     """
 
-    page, page_size = _normalize_pagination(page, page_size)
+    page, page_size = _normalize_pagination(
+        page,
+        page_size,
+    )
 
     student = (
         db.query(StudentAlias)
-        .filter(StudentAlias.id == student_alias_id)
+        .filter(
+            StudentAlias.id
+            == student_alias_id
+        )
         .first()
     )
 
@@ -366,78 +556,153 @@ def get_student_history(
             detail="Student alias not found.",
         )
 
-    base_query = (
-        db.query(Attempt, Problem, Diagnosis)
-        .join(Problem, Problem.id == Attempt.problem_id)
-        .outerjoin(Diagnosis, Diagnosis.attempt_id == Attempt.id)
-        .filter(Attempt.student_alias_id == student_alias_id)
+    attempt_query = (
+        db.query(Attempt, Problem)
+        .join(
+            Problem,
+            Problem.id
+            == Attempt.problem_id,
+        )
+        .filter(
+            Attempt.student_alias_id
+            == student_alias_id
+        )
     )
 
-    total_items = base_query.count()
+    total_items = (
+        db.query(
+            func.count(Attempt.id)
+        )
+        .filter(
+            Attempt.student_alias_id
+            == student_alias_id
+        )
+        .scalar()
+        or 0
+    )
 
-    rows = (
-        base_query.order_by(Attempt.created_at.desc())
-        .offset((page - 1) * page_size)
+    attempt_rows = (
+        attempt_query
+        .order_by(
+            Attempt.created_at.desc(),
+            Attempt.id.desc(),
+        )
+        .offset(
+            (page - 1) * page_size
+        )
         .limit(page_size)
         .all()
     )
 
-    summary_row = (
-        db.query(
-            func.count(Attempt.id),
-            func.count(Diagnosis.id),
-            func.count(
-                Diagnosis.id
-            ).filter(
-                Diagnosis.state
-                == DiagnosisState.NO_MISCONCEPTION.value
-            ),
-            func.count(
-                Diagnosis.id
-            ).filter(
-                Diagnosis.state.in_(
-                    SUPPORTED_MISCONCEPTION_STATES
-                )
-            ),
-            func.count(
-                Diagnosis.id
-            ).filter(
-                Diagnosis.state
-                == DiagnosisState.INSUFFICIENT.value
-            ),
-            func.avg(Attempt.response_time_seconds),
+    attempt_ids = [
+        attempt.id
+        for attempt, _ in attempt_rows
+    ]
+
+    latest_diagnoses_by_attempt = (
+        _get_latest_diagnoses_by_attempt(
+            db=db,
+            attempt_ids=attempt_ids,
         )
-        .outerjoin(Diagnosis, Diagnosis.attempt_id == Attempt.id)
-        .filter(Attempt.student_alias_id == student_alias_id)
-        .one()
     )
 
-    summary = StudentHistorySummary(
-        total_attempts=summary_row[0] or 0,
-        diagnosed_attempts=summary_row[1] or 0,
-        verified_attempts=summary_row[2] or 0,
-        misconception_attempts=summary_row[3] or 0,
-        insufficient_attempts=summary_row[4] or 0,
-        average_response_time_seconds=_optional_float(
-            summary_row[5]
-        ),
+    all_diagnosis_ids_by_attempt = (
+        _get_diagnosis_ids_by_attempt(
+            db=db,
+            attempt_ids=attempt_ids,
+        )
     )
 
-    items = [
-        StudentHistoryItem(
-            attempt=_attempt_summary(attempt),
-            problem=_problem_list_item(problem),
-            diagnosis=(
-                _diagnosis_summary(diagnosis)
+    hint_levels_by_attempt = (
+        _get_hint_levels_by_attempt(
+            db=db,
+            diagnosis_ids_by_attempt=(
+                all_diagnosis_ids_by_attempt
+            ),
+        )
+    )
+
+    answered_questions_by_attempt = (
+        _get_answered_question_attempt_ids(
+            db=db,
+            attempt_ids=attempt_ids,
+        )
+    )
+
+    evolution_by_attempt = (
+        _get_latest_evolution_by_attempt(
+            db=db,
+            attempt_ids=attempt_ids,
+        )
+    )
+
+    summary = _build_student_history_summary(
+        db=db,
+        student_alias_id=student_alias_id,
+    )
+
+    items: list[StudentHistoryItem] = []
+
+    for attempt, problem in attempt_rows:
+        diagnosis = (
+            latest_diagnoses_by_attempt.get(
+                attempt.id
+            )
+        )
+
+        evolution = (
+            evolution_by_attempt.get(
+                attempt.id
+            )
+        )
+
+        item_payload: dict[str, Any] = {
+            "attempt": _attempt_summary(
+                attempt
+            ),
+            "problem": _problem_list_item(
+                problem
+            ),
+            "diagnosis": (
+                _diagnosis_summary(
+                    diagnosis
+                )
                 if diagnosis is not None
                 else None
             ),
+            "parent_attempt_id": (
+                attempt.parent_attempt_id
+            ),
+            "retry_number": int(
+                attempt.retry_number or 0
+            ),
+            "hint_levels_used": (
+                hint_levels_by_attempt.get(
+                    attempt.id,
+                    [],
+                )
+            ),
+            "diagnostic_question_answered": (
+                attempt.id
+                in answered_questions_by_attempt
+            ),
+            "evolution_state": (
+                evolution.evolution_state
+                if evolution is not None
+                else None
+            ),
+        }
+
+        items.append(
+            StudentHistoryItem.model_validate(
+                item_payload
+            )
         )
-        for attempt, problem, diagnosis in rows
-    ]
 
     return StudentHistoryResponse(
-        student=_student_summary(student),
+        student=_student_summary(
+            student
+        ),
         summary=summary,
         items=items,
         pagination=PaginationMeta.create(
@@ -446,6 +711,361 @@ def get_student_history(
             total_items=total_items,
         ),
     )
+
+
+def _build_student_history_summary(
+    *,
+    db: Session,
+    student_alias_id: UUID,
+) -> StudentHistorySummary:
+    """
+    Build attempt-level summary metrics without double-counting attempts that
+    have multiple diagnosis snapshots.
+    """
+
+    attempts = (
+        db.query(Attempt)
+        .filter(
+            Attempt.student_alias_id
+            == student_alias_id
+        )
+        .all()
+    )
+
+    if not attempts:
+        return StudentHistorySummary(
+            total_attempts=0,
+            diagnosed_attempts=0,
+            verified_attempts=0,
+            misconception_attempts=0,
+            insufficient_attempts=0,
+            average_response_time_seconds=None,
+        )
+
+    attempt_ids = [
+        attempt.id
+        for attempt in attempts
+    ]
+
+    latest_diagnoses = (
+        _get_latest_diagnoses_by_attempt(
+            db=db,
+            attempt_ids=attempt_ids,
+        )
+    )
+
+    diagnosed_attempts = len(
+        latest_diagnoses
+    )
+
+    verified_attempts = 0
+    misconception_attempts = 0
+    insufficient_attempts = 0
+
+    for diagnosis in (
+        latest_diagnoses.values()
+    ):
+        state_value = (
+            diagnosis.state
+        )
+
+        if (
+            state_value
+            == DiagnosisState.NO_MISCONCEPTION.value
+        ):
+            verified_attempts += 1
+        elif (
+            state_value
+            in SUPPORTED_MISCONCEPTION_STATES
+        ):
+            misconception_attempts += 1
+        elif (
+            state_value
+            == DiagnosisState.INSUFFICIENT.value
+        ):
+            insufficient_attempts += 1
+
+    response_times = [
+        float(
+            attempt.response_time_seconds
+        )
+        for attempt in attempts
+        if (
+            attempt.response_time_seconds
+            is not None
+        )
+    ]
+
+    average_response_time = (
+        sum(response_times)
+        / len(response_times)
+        if response_times
+        else None
+    )
+
+    return StudentHistorySummary(
+        total_attempts=len(attempts),
+        diagnosed_attempts=diagnosed_attempts,
+        verified_attempts=verified_attempts,
+        misconception_attempts=misconception_attempts,
+        insufficient_attempts=insufficient_attempts,
+        average_response_time_seconds=(
+            _optional_float(
+                average_response_time
+            )
+        ),
+    )
+
+
+def _get_latest_diagnoses_by_attempt(
+    *,
+    db: Session,
+    attempt_ids: list[UUID],
+) -> dict[UUID, Diagnosis]:
+    """
+    Return the newest diagnosis snapshot for each requested attempt.
+    """
+
+    if not attempt_ids:
+        return {}
+
+    rows = (
+        db.query(Diagnosis)
+        .filter(
+            Diagnosis.attempt_id.in_(
+                attempt_ids
+            )
+        )
+        .order_by(
+            Diagnosis.attempt_id.asc(),
+            Diagnosis.created_at.asc(),
+            Diagnosis.id.asc(),
+        )
+        .all()
+    )
+
+    latest: dict[
+        UUID,
+        Diagnosis,
+    ] = {}
+
+    for diagnosis in rows:
+        latest[
+            diagnosis.attempt_id
+        ] = diagnosis
+
+    return latest
+
+
+def _get_diagnosis_ids_by_attempt(
+    *,
+    db: Session,
+    attempt_ids: list[UUID],
+) -> dict[UUID, list[UUID]]:
+    """
+    Return every immutable diagnosis ID grouped by attempt.
+    """
+
+    grouped: dict[
+        UUID,
+        list[UUID],
+    ] = {
+        attempt_id: []
+        for attempt_id in attempt_ids
+    }
+
+    if not attempt_ids:
+        return grouped
+
+    rows = (
+        db.query(
+            Diagnosis.attempt_id,
+            Diagnosis.id,
+        )
+        .filter(
+            Diagnosis.attempt_id.in_(
+                attempt_ids
+            )
+        )
+        .order_by(
+            Diagnosis.created_at.asc(),
+            Diagnosis.id.asc(),
+        )
+        .all()
+    )
+
+    for attempt_id, diagnosis_id in rows:
+        grouped.setdefault(
+            attempt_id,
+            [],
+        ).append(
+            diagnosis_id
+        )
+
+    return grouped
+
+
+def _get_hint_levels_by_attempt(
+    *,
+    db: Session,
+    diagnosis_ids_by_attempt: dict[
+        UUID,
+        list[UUID],
+    ],
+) -> dict[UUID, list[int]]:
+    """
+    Aggregate revealed hint levels across all diagnosis snapshots of each
+    attempt.
+    """
+
+    diagnosis_to_attempt: dict[
+        UUID,
+        UUID,
+    ] = {}
+
+    diagnosis_ids: list[UUID] = []
+
+    for (
+        attempt_id,
+        attempt_diagnosis_ids,
+    ) in diagnosis_ids_by_attempt.items():
+        for diagnosis_id in (
+            attempt_diagnosis_ids
+        ):
+            diagnosis_to_attempt[
+                diagnosis_id
+            ] = attempt_id
+
+            diagnosis_ids.append(
+                diagnosis_id
+            )
+
+    result: dict[
+        UUID,
+        set[int],
+    ] = {}
+
+    if not diagnosis_ids:
+        return {}
+
+    rows = (
+        db.query(
+            HintEvent.diagnosis_id,
+            HintEvent.level,
+        )
+        .filter(
+            HintEvent.diagnosis_id.in_(
+                diagnosis_ids
+            )
+        )
+        .order_by(
+            HintEvent.level.asc()
+        )
+        .all()
+    )
+
+    for diagnosis_id, level in rows:
+        attempt_id = (
+            diagnosis_to_attempt.get(
+                diagnosis_id
+            )
+        )
+
+        if attempt_id is None:
+            continue
+
+        result.setdefault(
+            attempt_id,
+            set(),
+        ).add(
+            int(level)
+        )
+
+    return {
+        attempt_id: sorted(
+            levels
+        )
+        for (
+            attempt_id,
+            levels,
+        ) in result.items()
+    }
+
+
+def _get_answered_question_attempt_ids(
+    *,
+    db: Session,
+    attempt_ids: list[UUID],
+) -> set[UUID]:
+    """
+    Return attempts that have at least one stored diagnostic response.
+    """
+
+    if not attempt_ids:
+        return set()
+
+    rows = (
+        db.query(
+            DiagnosticResponse.attempt_id
+        )
+        .filter(
+            DiagnosticResponse.attempt_id.in_(
+                attempt_ids
+            )
+        )
+        .distinct()
+        .all()
+    )
+
+    return {
+        row[0]
+        for row in rows
+    }
+
+
+def _get_latest_evolution_by_attempt(
+    *,
+    db: Session,
+    attempt_ids: list[UUID],
+) -> dict[
+    UUID,
+    MisconceptionEvolution,
+]:
+    """
+    Return the latest stored evolution record for every requested attempt.
+    """
+
+    if not attempt_ids:
+        return {}
+
+    rows = (
+        db.query(
+            MisconceptionEvolution
+        )
+        .filter(
+            MisconceptionEvolution.attempt_id.in_(
+                attempt_ids
+            )
+        )
+        .order_by(
+            MisconceptionEvolution.attempt_id.asc(),
+            MisconceptionEvolution.created_at.asc(),
+            MisconceptionEvolution.id.asc(),
+        )
+        .all()
+    )
+
+    result: dict[
+        UUID,
+        MisconceptionEvolution,
+    ] = {}
+
+    for evolution in rows:
+        result[
+            evolution.attempt_id
+        ] = evolution
+
+    return result
 
 
 def get_problem_analytics(

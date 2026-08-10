@@ -80,6 +80,16 @@ export type TeacherAttemptSummary = {
   id: string;
   student_alias_id: string;
   problem_id: string;
+
+  /*
+   * Sprint 9 retry linkage.
+   *
+   * Optional here so older teacher endpoints that
+   * do not expose the linkage fields remain valid.
+   */
+  parent_attempt_id?: string | null;
+  retry_number?: number | null;
+
   selected_language: string;
   response_time_seconds: number | null;
   created_at: string;
@@ -90,6 +100,13 @@ export type TeacherAttemptDetail = {
   id: string;
   student_alias_id: string;
   problem_id: string;
+
+  /*
+   * Sprint 9 retry linkage.
+   */
+  parent_attempt_id?: string | null;
+  retry_number?: number | null;
+
   final_answer: string | null;
   written_reasoning: string;
   source_code: string | null;
@@ -268,17 +285,51 @@ export type StudentHistorySummary = {
 };
 
 
-export type StudentHistoryItem = {
-  attempt: TeacherAttemptSummary;
-  problem: TeacherProblemSummary;
-  diagnosis: TeacherDiagnosisSummary | null;
+/*
+ * Sprint 9 misconception evolution states.
+ */
+export type MisconceptionEvolutionState =
+  | "newly_detected"
+  | "repeated"
+  | "improving"
+  | "corrected"
+  | "replaced"
+  | "uncertain";
 
-  /*
-   * Optional teacher-review context for future
-   * student-history endpoint support.
-   */
-  review?: TeacherReviewSummary | null;
+
+/*
+ * Sprint 9 intervention metadata attached to one
+ * student-history attempt.
+ *
+ * The fields remain optional to preserve compatibility
+ * with teacher endpoints that have not yet been upgraded
+ * to return intervention metadata.
+ */
+export type StudentHistoryInterventionMetadata = {
+  parent_attempt_id?: string | null;
+  retry_number?: number | null;
+
+  hint_levels_used?: number[];
+
+  diagnostic_question_answered?:
+    boolean;
+
+  evolution_state?:
+    MisconceptionEvolutionState | null;
 };
+
+
+export type StudentHistoryItem =
+  StudentHistoryInterventionMetadata & {
+    attempt: TeacherAttemptSummary;
+    problem: TeacherProblemSummary;
+    diagnosis: TeacherDiagnosisSummary | null;
+
+    /*
+     * Optional teacher-review context for student history.
+     */
+    review?: TeacherReviewSummary | null;
+  };
 
 
 export type StudentHistoryResponse = {

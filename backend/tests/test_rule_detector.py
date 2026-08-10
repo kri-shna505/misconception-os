@@ -73,6 +73,12 @@ def make_signals(
         single_stack_frame_claim_detected=False,
         locals_survive_return_claim_detected=False,
         recursive_locals_on_heap_claim_detected=False,
+
+        # Sprint 9 remediation / correct-understanding signals
+        correct_parameter_semantics_understood=False,
+        separate_stack_frames_understood=False,
+        locals_end_with_frame_understood=False,
+        stack_heap_distinction_understood=False,
     )
 
 

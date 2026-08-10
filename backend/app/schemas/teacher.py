@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from math import ceil
 from uuid import UUID
 
@@ -30,6 +31,19 @@ from app.schemas.student_schema import (
 from app.schemas.teacher_review import (
     TeacherReviewResponse,
 )
+
+
+class MisconceptionEvolutionState(str, Enum):
+    """
+    Sprint 9 misconception-learning transition states.
+    """
+
+    NEWLY_DETECTED = "newly_detected"
+    REPEATED = "repeated"
+    IMPROVING = "improving"
+    CORRECTED = "corrected"
+    REPLACED = "replaced"
+    UNCERTAIN = "uncertain"
 
 
 class PaginationMeta(BaseModel):
@@ -217,16 +231,98 @@ class TeacherAttemptDetailResponse(BaseModel):
 
 
 class StudentHistoryItem(BaseModel):
+    """
+    One attempt in the teacher-facing student learning timeline.
+
+    Sprint 9 adds intervention and evolution metadata while keeping the
+    timeline attempt-centric. The displayed diagnosis is the latest diagnosis
+    snapshot for the attempt, while hint/question activity may be aggregated
+    across all immutable diagnosis snapshots for that attempt.
+    """
+
     attempt: AttemptSummary
 
     problem: ProblemListItem
 
     diagnosis: DiagnosisSummary | None = None
 
+    parent_attempt_id: UUID | None = None
+
+    retry_number: int = Field(
+        default=0,
+        ge=0,
+    )
+
+    hint_levels_used: list[int] = Field(
+        default_factory=list,
+    )
+
+    diagnostic_question_answered: bool = False
+
+    evolution_state: (
+        MisconceptionEvolutionState | None
+    ) = None
+
+    review: TeacherReviewResponse | None = None
+
     model_config = ConfigDict(
         from_attributes=True,
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def validate_history_intervention_state(
+        self,
+    ) -> "StudentHistoryItem":
+        normalized_levels = sorted(
+            set(
+                self.hint_levels_used
+            )
+        )
+
+        if any(
+            level < 1 or level > 3
+            for level in normalized_levels
+        ):
+            raise ValueError(
+                "Hint levels used must be within the approved L1-L3 range."
+            )
+
+        expected_prefix = list(
+            range(
+                1,
+                len(normalized_levels) + 1,
+            )
+        )
+
+        if normalized_levels != expected_prefix:
+            raise ValueError(
+                "Hint levels used must form a sequential L1-L3 progression."
+            )
+
+        self.hint_levels_used = (
+            normalized_levels
+        )
+
+        if (
+            self.retry_number == 0
+            and self.parent_attempt_id
+            is not None
+        ):
+            raise ValueError(
+                "An original attempt must not contain a parent attempt ID."
+            )
+
+        if (
+            self.retry_number > 0
+            and self.parent_attempt_id
+            is None
+        ):
+            raise ValueError(
+                "A retry attempt requires a parent attempt ID."
+            )
+
+        return self
 
 
 class StudentHistorySummary(BaseModel):
@@ -265,6 +361,34 @@ class StudentHistorySummary(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
+
+    @model_validator(mode="after")
+    def validate_attempt_counts(
+        self,
+    ) -> "StudentHistorySummary":
+        if (
+            self.diagnosed_attempts
+            > self.total_attempts
+        ):
+            raise ValueError(
+                "Diagnosed attempts cannot exceed total attempts."
+            )
+
+        categorized_attempts = (
+            self.verified_attempts
+            + self.misconception_attempts
+            + self.insufficient_attempts
+        )
+
+        if (
+            categorized_attempts
+            > self.diagnosed_attempts
+        ):
+            raise ValueError(
+                "Categorized attempt counts cannot exceed diagnosed attempts."
+            )
+
+        return self
 
 
 class StudentHistoryResponse(BaseModel):
@@ -494,18 +618,32 @@ class TeacherDashboardResponse(BaseModel):
             > summary.total_diagnoses
         ):
             raise ValueError(
-                "Categorized diagnosis counts cannot exceed "
-                "total_diagnoses."
+                "Categorized diagnosis counts cannot exceed total_diagnoses."
             )
 
-        if (
-            summary.total_diagnoses
-            + summary.undiagnosed_attempts
-            > summary.total_attempts
-        ):
-            raise ValueError(
-                "Diagnosed and undiagnosed attempt counts cannot exceed "
-                "total_attempts."
-            )
+        # Sprint 9 note:
+        # One attempt may now have multiple immutable diagnosis snapshots
+        # after diagnostic-question re-evaluation. Therefore total_diagnoses
+        # may legitimately exceed total_attempts and must not be validated
+        # against total_attempts.
 
         return self
+
+
+__all__ = [
+    "AttemptsOverTimeItem",
+    "DiagnosisStateMetric",
+    "MisconceptionAnalyticsItem",
+    "MisconceptionAnalyticsResponse",
+    "MisconceptionEvolutionState",
+    "PaginationMeta",
+    "ProblemAnalyticsResponse",
+    "StudentHistoryItem",
+    "StudentHistoryResponse",
+    "StudentHistorySummary",
+    "TeacherAttemptDetailResponse",
+    "TeacherAttemptListItem",
+    "TeacherAttemptListResponse",
+    "TeacherDashboardResponse",
+    "TeacherDashboardSummary",
+]

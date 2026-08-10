@@ -15,8 +15,13 @@ from app.models.diagnosis import Diagnosis  # noqa: F401
 from app.models.diagnosis_alternative import DiagnosisAlternative  # noqa: F401
 from app.models.diagnosis_evidence import DiagnosisEvidence  # noqa: F401
 from app.models.diagnostic_question import DiagnosticQuestion  # noqa: F401
+from app.models.diagnostic_response import DiagnosticResponse  # noqa: F401
+from app.models.hint_event import HintEvent  # noqa: F401
 from app.models.hint_template import HintTemplate  # noqa: F401
 from app.models.misconception import Misconception  # noqa: F401
+from app.models.misconception_evolution import (
+    MisconceptionEvolution,
+)  # noqa: F401
 from app.models.problem import Problem  # noqa: F401
 from app.models.problem_misconception import ProblemMisconception  # noqa: F401
 from app.models.student_alias import StudentAlias  # noqa: F401
@@ -44,7 +49,9 @@ def run_migrations_offline() -> None:
     Alembic emits SQL statements using the configured database URL.
     """
 
-    url = config.get_main_option("sqlalchemy.url")
+    url = config.get_main_option(
+        "sqlalchemy.url",
+    )
 
     context.configure(
         url=url,

@@ -210,8 +210,8 @@ def configure_new_diagnosis_flow(
     )
 
 
-def test_model_version_is_rule_v1_4() -> None:
-    assert diagnosis_service.MODEL_VERSION == "rule-v1.4"
+def test_model_version_is_rule_v1_8() -> None:
+    assert diagnosis_service.MODEL_VERSION == "rule-v1.8"
 
 
 @pytest.mark.parametrize(
@@ -422,7 +422,7 @@ def test_invalid_confidence_is_rejected(
     )
 
 
-def test_create_m4_diagnosis_persists_rule_v1_4(
+def test_create_m4_diagnosis_persists_rule_v1_8(
     monkeypatch: pytest.MonkeyPatch,
     fixed_created_at: datetime,
 ) -> None:
@@ -473,7 +473,7 @@ def test_create_m4_diagnosis_persists_rule_v1_4(
     )
     assert response.state == DiagnosisState.CONFIDENT
     assert response.confidence == 0.92
-    assert response.model_version == "rule-v1.4"
+    assert response.model_version == "rule-v1.8"
     assert response.next_action == DiagnosisNextAction.SHOW_HINT
     assert response.primary_misconception is not None
     assert response.primary_misconception.code == "M4"
@@ -489,7 +489,7 @@ def test_create_m4_diagnosis_persists_rule_v1_4(
 
     assert diagnosis_insert is not None
     assert diagnosis_insert["state"] == "confident"
-    assert diagnosis_insert["model_version"] == "rule-v1.4"
+    assert diagnosis_insert["model_version"] == "rule-v1.8"
     assert (
         diagnosis_insert["primary_misconception_id"]
         == misconception.id
@@ -544,7 +544,7 @@ def test_create_m5_diagnosis_persists_correct_primary_label(
     assert response.primary_misconception is not None
     assert response.primary_misconception.code == "M5"
     assert response.confidence == 0.91
-    assert response.model_version == "rule-v1.4"
+    assert response.model_version == "rule-v1.8"
     assert db.commit_count == 1
 
 
@@ -706,7 +706,7 @@ def test_cross_topic_detection_is_rejected(
     )
 
 
-def test_existing_rule_v1_4_diagnosis_is_returned_without_new_insert(
+def test_existing_rule_v1_8_diagnosis_is_returned_without_new_insert(
     monkeypatch: pytest.MonkeyPatch,
     fixed_created_at: datetime,
 ) -> None:
@@ -726,7 +726,7 @@ def test_existing_rule_v1_4_diagnosis_is_returned_without_new_insert(
         primary_misconception=None,
         evidence=[],
         alternatives=[],
-        model_version="rule-v1.4",
+        model_version="rule-v1.8",
         decision_reason=(
             "Existing diagnosis returned."
         ),
@@ -773,7 +773,7 @@ def test_existing_rule_v1_4_diagnosis_is_returned_without_new_insert(
 
     assert response is expected_response
     assert captured_model_versions == [
-        "rule-v1.4"
+        "rule-v1.8"
     ]
     assert db.executed == []
     assert db.commit_count == 0

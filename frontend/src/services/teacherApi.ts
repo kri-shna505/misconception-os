@@ -1,4 +1,6 @@
-import { apiGet } from "../api/client";
+import {
+  apiGet,
+} from "../api/client";
 
 import type {
   MisconceptionAnalyticsQuery,
@@ -14,13 +16,15 @@ import type {
 } from "../types/teacher";
 
 
-const TEACHER_API_PREFIX = "/teacher";
+const TEACHER_API_PREFIX =
+  "/teacher";
 
 
 function sanitizeText(
   value: string | undefined
 ): string | undefined {
-  const normalized = value?.trim();
+  const normalized =
+    value?.trim();
 
   return normalized
     ? normalized
@@ -40,10 +44,11 @@ function normalizePositiveInteger(
     return fallback;
   }
 
-  const normalized = Math.max(
-    1,
-    Math.trunc(value)
-  );
+  const normalized =
+    Math.max(
+      1,
+      Math.trunc(value)
+    );
 
   return maximum === undefined
     ? normalized
@@ -121,10 +126,9 @@ export async function getTeacherAttempts(
     );
 
   /*
-   * The backend now returns each attempt together with its
-   * diagnosis and teacher-review summary.
-   *
-   * No per-row review requests are required here.
+   * The backend returns each attempt together with
+   * diagnosis and teacher-review context, so the UI
+   * does not need per-row follow-up requests.
    */
   return apiGet<TeacherAttemptListResponse>(
     `${TEACHER_API_PREFIX}/attempts`,
@@ -182,10 +186,6 @@ export async function getTeacherAttemptDetail(
       "attemptId"
     );
 
-  /*
-   * The detail endpoint now returns the attempt, diagnosis,
-   * problem context, and teacher review in one response.
-   */
   return apiGet<TeacherAttemptDetailResponse>(
     `${TEACHER_API_PREFIX}/attempts/${encodeURIComponent(
       normalizedAttemptId
@@ -221,6 +221,18 @@ export async function getStudentHistory(
       100
     );
 
+  /*
+   * Sprint 9F teacher-facing student history endpoint.
+   *
+   * The response is expected to contain:
+   * - student summary;
+   * - aggregate history summary;
+   * - paginated attempt timeline;
+   * - retry/intervention/evolution metadata on each item.
+   *
+   * The backend teacher history service must expose the
+   * Sprint 9 metadata declared in StudentHistoryItem.
+   */
   return apiGet<StudentHistoryResponse>(
     `${TEACHER_API_PREFIX}/students/${encodeURIComponent(
       normalizedStudentAliasId

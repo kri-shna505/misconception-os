@@ -175,7 +175,8 @@ def _detect_supported_correct_structure(
                 decision_reason=(
                     "The student correctly recognizes that binary search requires "
                     "sorted input and implements a sequential linear search for the "
-                    "unsorted array."
+                    "unsorted array. The evidence is language-independent and may "
+                    "come from either Python or C/C++ source analysis."
                 ),
                 next_action=DiagnosisNextAction.NO_ACTION,
             )
@@ -210,24 +211,33 @@ def _detect_supported_correct_structure(
             alternative_misconception_codes=[],
             decision_reason=(
                 "The recursive implementation includes a stopping condition and "
-                "reduces the recursive argument toward termination."
+                "reduces the recursive argument toward termination. These signals "
+                "are accepted from supported Python or C/C++ source analysis."
             ),
             next_action=DiagnosisNextAction.NO_ACTION,
         )
 
     if "M4" in allowed_rules:
-        correct_parameter_semantics = _has_evidence_fragment(
-            signals,
-            [
-                "caller variables remain unchanged",
-                "original caller variables do not change",
-                "uses pointers to modify caller variables",
-                "passes addresses",
-                "dereferences the pointers",
-                "returns the swapped values",
-                "correctly explains pass-by-value",
-                "correctly explains parameter passing",
-            ],
+        correct_parameter_semantics = any(
+            (
+                _signal_enabled(
+                    signals,
+                    "correct_parameter_semantics_understood",
+                ),
+                _has_evidence_fragment(
+                    signals,
+                    [
+                        "caller variables remain unchanged",
+                        "original caller variables do not change",
+                        "uses pointers to modify caller variables",
+                        "passes addresses",
+                        "dereferences the pointers",
+                        "returns the swapped values",
+                        "correctly explains pass-by-value",
+                        "correctly explains parameter passing",
+                    ],
+                ),
+            )
         )
 
         if (
@@ -239,6 +249,10 @@ def _detect_supported_correct_structure(
             and not _signal_enabled(
                 signals,
                 "pass_by_value_confusion_detected",
+            )
+            and not _signal_enabled(
+                signals,
+                "swap_uses_only_local_reassignment",
             )
         ):
             evidence = _evidence_matching(
@@ -252,6 +266,7 @@ def _detect_supported_correct_structure(
                     "returns the swapped values",
                     "correctly explains pass-by-value",
                     "correctly explains parameter passing",
+                    "local parameter changes do not change the caller variables automatically",
                 ],
             )
 
@@ -274,12 +289,27 @@ def _detect_supported_correct_structure(
             signals,
             [
                 "each recursive call has its own stack frame",
+                "each recursive call gets its own stack frame",
+                "each call has its own stack frame",
+                "each call gets its own stack frame",
                 "separate stack frame",
-                "local variables are stored in the stack frame",
-                "stack frame is removed when the call returns",
-                "heap allocation has a separate lifetime",
-                "correctly distinguishes stack and heap",
+                "separate stack frames",
                 "one frame per active call",
+                "one stack frame per active call",
+                "local variables are stored in the stack frame",
+                "local variables belong to that call's stack frame",
+                "local variables belong to each call's stack frame",
+                "local variables exist while that call is active",
+                "local variables are destroyed when the call returns",
+                "local variables disappear when the call returns",
+                "stack frame is removed when the call returns",
+                "stack frame disappears when the call returns",
+                "stack frame is destroyed when the call returns",
+                "heap allocation has a separate lifetime",
+                "heap memory has a separate lifetime",
+                "heap memory follows different lifetime rules",
+                "heap-allocated memory follows different lifetime rules",
+                "correctly distinguishes stack and heap",
             ],
         )
 
@@ -591,6 +621,10 @@ def _detect_m4_parameter_passing_confusion(
         (
             _signal_enabled(signals, "pointer_based_swap_detected"),
             _signal_enabled(signals, "return_based_swap_detected"),
+            _signal_enabled(
+                signals,
+                "correct_parameter_semantics_understood",
+            ),
             _has_evidence_fragment(
                 signals,
                 [
@@ -600,13 +634,54 @@ def _detect_m4_parameter_passing_confusion(
                     "returns the swapped values",
                     "caller variables remain unchanged without pointers",
                     "correctly explains pass-by-value",
+                    "local parameter changes do not change the caller variables automatically",
                 ],
             ),
         )
     )
 
-    if correct_mechanism and not direct_confusion and not reasoning_confusion:
+    # Fully corrected M4 evidence: the student now understands caller-visible
+    # mutation and the implementation is not merely a local-parameter swap.
+    if (
+        correct_mechanism
+        and not direct_confusion
+        and not reasoning_confusion
+        and not code_only_local_swap
+    ):
         return None
+
+    # Partial correction: reasoning is now correct but the submitted swap still
+    # only changes local parameters. Keep M4 as POSSIBLE so the retry can be
+    # classified as Improving rather than Repeated.
+    if (
+        correct_mechanism
+        and code_only_local_swap
+        and not direct_confusion
+        and not reasoning_confusion
+    ):
+        evidence = _evidence_matching(
+            signals,
+            [
+                "local parameter changes do not change the caller variables automatically",
+                "swap function only reassigns local parameters",
+                "caller-visible mutation mechanism was not detected",
+                "only local assignments were detected",
+            ],
+        )
+
+        return RuleDetectionResult(
+            state=DiagnosisState.POSSIBLE,
+            misconception_code="M4",
+            confidence=0.64,
+            evidence=evidence,
+            alternative_misconception_codes=[],
+            decision_reason=(
+                "The retry shows improved understanding of pass-by-value, but "
+                "the implementation still changes only local parameters and does "
+                "not yet demonstrate caller-visible mutation."
+            ),
+            next_action=DiagnosisNextAction.ASK_DIAGNOSTIC_QUESTION,
+        )
 
     if not direct_confusion and not reasoning_confusion and not code_only_local_swap:
         return None
@@ -672,12 +747,33 @@ def _detect_m5_stack_heap_confusion(
     or recursive-call memory behaviour.
     """
 
+    # Keep the individual M5 signals separate. The broad
+    # stack_heap_confusion_detected flag is useful as a candidate signal,
+    # but it must not by itself force a CONFIDENT diagnosis. Otherwise a
+    # partially corrected retry is scored exactly like the original strong
+    # misconception and the evolution layer can only report "Repeated".
+    single_frame_confusion = _signal_enabled(
+        signals,
+        "single_stack_frame_claim_detected",
+    )
+    locals_survive_return_confusion = _signal_enabled(
+        signals,
+        "locals_survive_return_claim_detected",
+    )
+    recursive_locals_on_heap_confusion = _signal_enabled(
+        signals,
+        "recursive_locals_on_heap_claim_detected",
+    )
+    broad_stack_heap_confusion = _signal_enabled(
+        signals,
+        "stack_heap_confusion_detected",
+    )
+
     explicit_confusion = any(
         (
-            _signal_enabled(signals, "stack_heap_confusion_detected"),
-            _signal_enabled(signals, "single_stack_frame_claim_detected"),
-            _signal_enabled(signals, "locals_survive_return_claim_detected"),
-            _signal_enabled(signals, "recursive_locals_on_heap_claim_detected"),
+            single_frame_confusion,
+            locals_survive_return_confusion,
+            recursive_locals_on_heap_confusion,
         )
     )
 
@@ -711,18 +807,45 @@ def _detect_m5_stack_heap_confusion(
         signals,
         [
             "each recursive call has its own stack frame",
+            "each recursive call gets its own stack frame",
+            "each call has its own stack frame",
+            "each call gets its own stack frame",
             "separate stack frame",
+            "separate stack frames",
             "one frame per active call",
+            "one stack frame per active call",
+            "local variables are stored in the stack frame",
+            "local variables belong to that call's stack frame",
+            "local variables belong to each call's stack frame",
+            "local variables exist while that call is active",
+            "local variables are destroyed when the call returns",
+            "local variables disappear when the call returns",
             "stack frame is removed when the call returns",
+            "stack frame disappears when the call returns",
+            "stack frame is destroyed when the call returns",
             "heap allocation has a separate lifetime",
+            "heap memory has a separate lifetime",
+            "heap memory follows different lifetime rules",
+            "heap-allocated memory follows different lifetime rules",
             "correctly distinguishes stack and heap",
         ],
     )
 
-    if correct_memory_model and not explicit_confusion and not strong_confusion:
+    if (
+        correct_memory_model
+        and not explicit_confusion
+        and not strong_confusion
+        and not partial_confusion
+        and not broad_stack_heap_confusion
+    ):
         return None
 
-    if not explicit_confusion and not strong_confusion and not partial_confusion:
+    if (
+        not explicit_confusion
+        and not strong_confusion
+        and not partial_confusion
+        and not broad_stack_heap_confusion
+    ):
         return None
 
     evidence = _evidence_matching(
@@ -745,6 +868,33 @@ def _detect_m5_stack_heap_confusion(
         ],
     )
 
+    # Sprint 9 Improving transition:
+    # A retry can contain a verified correction (for example, the student now
+    # states that each active recursive call has its own stack frame) while still
+    # expressing residual uncertainty about local-variable or heap lifetime.
+    # That mixed state is weaker than the original direct misconception and must
+    # therefore become POSSIBLE, not CONFIDENT. Otherwise the evolution layer can
+    # only classify the retry as Repeated instead of Improving.
+    if (
+        correct_memory_model
+        and explicit_confusion
+        and not strong_confusion
+    ):
+        return RuleDetectionResult(
+            state=DiagnosisState.POSSIBLE,
+            misconception_code="M5",
+            confidence=0.64,
+            evidence=evidence,
+            alternative_misconception_codes=[],
+            decision_reason=(
+                "The retry shows a meaningful correction in the student's memory "
+                "model, but some stack/heap or local-variable-lifetime uncertainty "
+                "remains. The misconception is therefore still plausible, but no "
+                "longer strong enough for a confident M5 diagnosis."
+            ),
+            next_action=DiagnosisNextAction.ASK_DIAGNOSTIC_QUESTION,
+        )
+
     if explicit_confusion or strong_confusion:
         return RuleDetectionResult(
             state=DiagnosisState.CONFIDENT,
@@ -755,11 +905,15 @@ def _detect_m5_stack_heap_confusion(
             decision_reason=(
                 "The student's explanation contains a direct stack/heap or "
                 "stack-frame-lifetime misconception, such as reusing one frame "
-                "for all recursive calls or retaining local variables after return."
+                "for all recursive calls, placing ordinary recursive locals on "
+                "the heap, or retaining local variables after return."
             ),
             next_action=DiagnosisNextAction.SHOW_HINT,
         )
 
+    # Broad or mixed M5 evidence is intentionally POSSIBLE rather than
+    # CONFIDENT. This allows a strong parent diagnosis to become a weaker
+    # retry diagnosis and therefore be classified as Improving.
     return RuleDetectionResult(
         state=DiagnosisState.POSSIBLE,
         misconception_code="M5",
@@ -767,9 +921,9 @@ def _detect_m5_stack_heap_confusion(
         evidence=evidence,
         alternative_misconception_codes=[],
         decision_reason=(
-            "The memory explanation is incomplete or ambiguous about stack frames, "
-            "heap allocation, or local-variable lifetime, so a diagnostic question "
-            "is required before confirming M5."
+            "The submission still contains a stack/heap or lifetime concern, but "
+            "the available evidence is partial, ambiguous, or mixed with correct "
+            "memory-model reasoning. More evidence is required before confirming M5."
         ),
         next_action=DiagnosisNextAction.ASK_DIAGNOSTIC_QUESTION,
     )
