@@ -16,10 +16,8 @@ import type {
   RevealedHintListResponse,
 } from "./types";
 
-
 const INTERVENTION_API_PREFIX =
   "/interventions";
-
 
 function normalizeRequiredId(
   value: string,
@@ -37,7 +35,6 @@ function normalizeRequiredId(
   return normalizedValue;
 }
 
-
 function normalizeOptionalId(
   value?: string | null
 ): string | undefined {
@@ -48,7 +45,6 @@ function normalizeOptionalId(
     ? normalizedValue
     : undefined;
 }
-
 
 export async function getHintProgress(
   diagnosisId: string,
@@ -80,7 +76,6 @@ export async function getHintProgress(
     }
   );
 }
-
 
 export async function revealNextHint(
   diagnosisId: string,
@@ -117,7 +112,6 @@ export async function revealNextHint(
   );
 }
 
-
 export async function getRevealedHints(
   diagnosisId: string,
   studentAliasId: string,
@@ -149,7 +143,6 @@ export async function getRevealedHints(
   );
 }
 
-
 export async function getNextDiagnosticQuestion(
   diagnosisId: string,
   studentAliasId: string,
@@ -180,7 +173,6 @@ export async function getNextDiagnosticQuestion(
     }
   );
 }
-
 
 export async function submitDiagnosticResponse(
   diagnosisId: string,
@@ -239,7 +231,6 @@ export async function submitDiagnosticResponse(
   );
 }
 
-
 export async function getDiagnosticResponse(
   diagnosticResponseId: string,
   studentAliasId: string,
@@ -270,7 +261,6 @@ export async function getDiagnosticResponse(
     }
   );
 }
-
 
 export async function markDiagnosticResponseEvaluated(
   diagnosticResponseId: string,
@@ -307,7 +297,6 @@ export async function markDiagnosticResponseEvaluated(
   );
 }
 
-
 export async function createRetryAttempt(
   parentAttemptId: string,
   studentAliasId: string,
@@ -334,6 +323,29 @@ export async function createRetryAttempt(
       .trim()
       .toLowerCase();
 
+  const normalizedInputLanguage =
+    payload.input_language
+      .trim()
+      .toLowerCase();
+
+  const normalizedInputModality =
+    payload.input_modality;
+
+  const normalizedFinalAnswer =
+    normalizeOptionalId(
+      payload.final_answer
+    ) ?? null;
+
+  const normalizedSourceCode =
+    normalizeOptionalId(
+      payload.source_code
+    ) ?? null;
+
+  const normalizedSpeechTranscript =
+    normalizeOptionalId(
+      payload.speech_transcript
+    ) ?? null;
+
   if (!normalizedReasoning) {
     throw new Error(
       "Retry written reasoning must not be blank."
@@ -346,6 +358,34 @@ export async function createRetryAttempt(
     );
   }
 
+  if (!normalizedInputLanguage) {
+    throw new Error(
+      "Retry input language is required."
+    );
+  }
+
+  if (!normalizedInputModality) {
+    throw new Error(
+      "Retry input modality is required."
+    );
+  }
+
+  /*
+   * Sprint 10 consistency protection.
+   *
+   * A speech transcript must never be sent with a modality
+   * that does not advertise speech. The backend intentionally
+   * rejects that inconsistent payload.
+   */
+  if (
+    normalizedSpeechTranscript &&
+    !normalizedInputModality.includes("speech")
+  ) {
+    throw new Error(
+      "Retry input modality must include speech when a speech transcript is provided."
+    );
+  }
+
   return apiPost<
     RetryAttemptResponse,
     RetryAttemptCreate
@@ -355,22 +395,37 @@ export async function createRetryAttempt(
     )}/retry`,
     {
       final_answer:
-        normalizeOptionalId(
-          payload.final_answer
-        ) ?? null,
+        normalizedFinalAnswer,
 
       written_reasoning:
         normalizedReasoning,
 
+      normalized_reasoning:
+        payload.normalized_reasoning ??
+        null,
+
       source_code:
-        normalizeOptionalId(
-          payload.source_code
-        ) ?? null,
+        normalizedSourceCode,
 
       speech_transcript:
+        normalizedSpeechTranscript,
+
+      speech_audio_reference:
         normalizeOptionalId(
-          payload.speech_transcript
+          payload.speech_audio_reference
         ) ?? null,
+
+      speech_audio_retained:
+        payload.speech_audio_retained ??
+        false,
+
+      speech_processing_status:
+        payload.speech_processing_status ??
+        (
+          normalizedSpeechTranscript
+            ? "completed"
+            : "not_provided"
+        ),
 
       selected_language:
         normalizedLanguage,
@@ -378,6 +433,17 @@ export async function createRetryAttempt(
       response_time_seconds:
         payload.response_time_seconds ??
         null,
+
+      input_language:
+        normalizedInputLanguage,
+
+      input_modality:
+        normalizedInputModality,
+
+      detected_language:
+        normalizeOptionalId(
+          payload.detected_language
+        ) ?? null,
     },
     {
       query: {
@@ -388,7 +454,6 @@ export async function createRetryAttempt(
     }
   );
 }
-
 
 export async function recordMisconceptionEvolution(
   diagnosisId: string,
@@ -413,7 +478,6 @@ export async function recordMisconceptionEvolution(
     }
   );
 }
-
 
 export async function getLearningHistory(
   studentAliasId: string,
@@ -441,7 +505,6 @@ export async function getLearningHistory(
     }
   );
 }
-
 
 export const interventionApi = {
   getHintProgress,

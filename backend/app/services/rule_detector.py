@@ -45,8 +45,17 @@ def detect_misconception(
     When ``allowed_rule_codes`` is None, all currently supported rules are
     evaluated.
 
-    This function never inspects raw source code directly. It relies on
-    EvidenceSignals produced by evidence_extractor.py.
+    Sprint 10:
+    - The detector remains modality-agnostic and never reads raw attempt fields.
+    - normalized_reasoning, speech transcripts, and language metadata are
+      resolved by evidence_extractor.py before signals reach this layer.
+    - Rule decisions therefore remain deterministic across text, code, speech,
+      and mixed-modality attempts.
+    - Weak/empty modality input must not create a misconception unless the
+      extractor produced rule-specific observable evidence.
+
+    This function never inspects raw source code or raw speech directly. It
+    relies exclusively on EvidenceSignals produced by evidence_extractor.py.
     """
 
     allowed_rules = _normalize_allowed_rule_codes(allowed_rule_codes)
@@ -61,9 +70,11 @@ def detect_misconception(
 
     # A genuinely weak submission should not receive a confident diagnosis
     # unless the extractor still found a strong rule-specific signal.
+    evidence_items = list(getattr(signals, "evidence", []) or [])
+
     has_strong_evidence = any(
         item.strength == EvidenceStrength.STRONG
-        for item in signals.evidence
+        for item in evidence_items
     )
 
     if signals.weak_submission and not has_strong_evidence:
@@ -936,9 +947,9 @@ def _signal_enabled(
     """
     Read an optional boolean EvidenceSignals attribute safely.
 
-    Sprint 8 adds structured M4/M5 signals in evidence_extractor.py. Using a
-    safe accessor keeps this detector importable while the extractor update is
-    applied in the next step.
+    Structured extractor flags may evolve independently of this detector.
+    A safe accessor keeps rule evaluation backward-compatible when a signal is
+    absent from an older EvidenceSignals object.
     """
 
     return bool(
@@ -947,6 +958,26 @@ def _signal_enabled(
             attribute_name,
             False,
         )
+    )
+
+
+def _evidence_items(
+    signals: EvidenceSignals,
+) -> list[RuleEvidence]:
+    """
+    Return extracted evidence safely.
+
+    Sprint 10 keeps modality and normalization handling in the extractor.
+    The detector consumes only the resulting structured evidence contract.
+    """
+
+    return list(
+        getattr(
+            signals,
+            "evidence",
+            [],
+        )
+        or []
     )
 
 
@@ -969,7 +1000,7 @@ def _has_evidence_fragment(
             fragment in item.text.lower()
             for fragment in normalized_fragments
         )
-        for item in signals.evidence
+        for item in _evidence_items(signals)
     )
 
 
@@ -1032,16 +1063,18 @@ def _weak_or_general_evidence(
     to a small general evidence sample.
     """
 
+    evidence = _evidence_items(signals)
+
     weak_evidence = [
         item
-        for item in signals.evidence
+        for item in evidence
         if item.strength == EvidenceStrength.WEAK
     ]
 
     if weak_evidence:
         return weak_evidence[:3]
 
-    return signals.evidence[:3]
+    return evidence[:3]
 
 
 def _evidence_matching(
@@ -1049,10 +1082,13 @@ def _evidence_matching(
     text_fragments: list[str],
 ) -> list[RuleEvidence]:
     """
-    Return only evidence relevant to the active rule.
+    Return evidence relevant to the active rule while preserving Sprint 10
+    multimodal provenance.
 
-    If no exact fragment matches, return a limited evidence sample rather than
-    the whole evidence list.
+    Rule-specific matches remain the primary evidence. When a speech transcript
+    contributed to the attempt, at least one speech-provenance item is retained
+    in the returned evidence so the final diagnosis response does not silently
+    lose the student's speech channel.
     """
 
     normalized_fragments = [
@@ -1061,13 +1097,50 @@ def _evidence_matching(
         if fragment.strip()
     ]
 
+    evidence = _evidence_items(signals)
+
     matched = [
         item
-        for item in signals.evidence
+        for item in evidence
         if any(
             fragment in item.text.lower()
             for fragment in normalized_fragments
         )
     ]
 
-    return matched[:5] if matched else signals.evidence[:3]
+    selected = list(
+        matched[:5]
+        if matched
+        else evidence[:3]
+    )
+
+    speech_evidence = [
+        item
+        for item in evidence
+        if getattr(
+            getattr(item, "source", None),
+            "value",
+            getattr(item, "source", None),
+        )
+        == "speech_transcript"
+    ]
+
+    if speech_evidence and not any(
+        getattr(
+            getattr(item, "source", None),
+            "value",
+            getattr(item, "source", None),
+        )
+        == "speech_transcript"
+        for item in selected
+    ):
+        speech_item = speech_evidence[0]
+
+        if len(selected) < 5:
+            selected.append(speech_item)
+        elif selected:
+            selected[-1] = speech_item
+        else:
+            selected.append(speech_item)
+
+    return selected

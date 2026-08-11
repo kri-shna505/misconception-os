@@ -10,6 +10,7 @@ import {
 } from "../api";
 
 import type {
+  RetryAttemptCreate,
   RetryAttemptResponse,
 } from "../types";
 
@@ -19,6 +20,7 @@ type RetryPanelProps = {
   studentAliasId: string;
 
   defaultLanguage?: string | null;
+  defaultInputLanguage?: string | null;
 
   initialFinalAnswer?: string | null;
   initialWrittenReasoning?: string | null;
@@ -57,6 +59,32 @@ const LANGUAGE_OPTIONS = [
     label: "Text / no code",
   },
 ] as const;
+
+const INPUT_LANGUAGE_OPTIONS = [
+  {
+    value: "english",
+    label: "English",
+  },
+  {
+    value: "telugu",
+    label: "Telugu",
+  },
+  {
+    value: "hindi",
+    label: "Hindi",
+  },
+] as const;
+
+
+type InputModality =
+  | "text"
+  | "code"
+  | "speech"
+  | "text_code"
+  | "text_speech"
+  | "code_speech"
+  | "text_code_speech";
+
 
 
 function normalizeLanguage(
@@ -106,6 +134,86 @@ function normalizeLanguage(
   }
 
   return "python";
+}
+
+
+function normalizeInputLanguage(
+  value?: string | null
+): string {
+  const normalized =
+    value?.trim().toLowerCase();
+
+  if (
+    normalized === "telugu" ||
+    normalized === "te" ||
+    normalized === "tel"
+  ) {
+    return "telugu";
+  }
+
+  if (
+    normalized === "hindi" ||
+    normalized === "hi" ||
+    normalized === "hin"
+  ) {
+    return "hindi";
+  }
+
+  return "english";
+}
+
+
+function deriveInputModality({
+  hasText,
+  hasCode,
+  hasSpeech,
+}: {
+  hasText: boolean;
+  hasCode: boolean;
+  hasSpeech: boolean;
+}): InputModality {
+  if (
+    hasText &&
+    hasCode &&
+    hasSpeech
+  ) {
+    return "text_code_speech";
+  }
+
+  if (hasText && hasCode) {
+    return "text_code";
+  }
+
+  if (hasText && hasSpeech) {
+    return "text_speech";
+  }
+
+  if (hasCode && hasSpeech) {
+    return "code_speech";
+  }
+
+  if (hasSpeech) {
+    return "speech";
+  }
+
+  if (hasCode) {
+    return "code";
+  }
+
+  return "text";
+}
+
+
+function formatInputModality(
+  value: InputModality
+): string {
+  return value
+    .split("_")
+    .map(
+      (part) =>
+        `${part.charAt(0).toUpperCase()}${part.slice(1)}`
+    )
+    .join(" + ");
 }
 
 
@@ -169,6 +277,7 @@ export default function RetryPanel({
   parentAttemptId,
   studentAliasId,
   defaultLanguage,
+  defaultInputLanguage,
   initialFinalAnswer,
   initialWrittenReasoning,
   initialSourceCode,
@@ -208,6 +317,15 @@ export default function RetryPanel({
   ] = useState(
     normalizeLanguage(
       defaultLanguage
+    )
+  );
+
+  const [
+    inputLanguage,
+    setInputLanguage,
+  ] = useState(
+    normalizeInputLanguage(
+      defaultInputLanguage
     )
   );
 
@@ -255,12 +373,19 @@ export default function RetryPanel({
       )
     );
 
+    setInputLanguage(
+      normalizeInputLanguage(
+        defaultInputLanguage
+      )
+    );
+
     setExpanded(false);
     setCreatedRetry(null);
     setError(null);
     setStartedAt(Date.now());
     setElapsedSeconds(1);
   }, [
+    defaultInputLanguage,
     defaultLanguage,
     initialFinalAnswer,
     initialSourceCode,
@@ -327,6 +452,17 @@ export default function RetryPanel({
     sourceCode.trim().length > 0 ||
     speechTranscript.trim().length > 0;
 
+  const inputModality =
+    deriveInputModality({
+      hasText:
+        finalAnswer.trim().length > 0 ||
+        normalizedReasoning.length > 0,
+      hasCode:
+        sourceCode.trim().length > 0,
+      hasSpeech:
+        speechTranscript.trim().length > 0,
+    });
+
   const canSubmit =
     hasRequiredReasoning &&
     hasSubmissionContent &&
@@ -378,35 +514,57 @@ export default function RetryPanel({
       setSubmitting(true);
       setError(null);
 
+      const retryPayload: RetryAttemptCreate = {
+        final_answer:
+          finalAnswer.trim()
+            ? finalAnswer.trim()
+            : null,
+
+        written_reasoning:
+          normalizedReasoning,
+
+        normalized_reasoning: null,
+
+        source_code:
+          sourceCode.trim()
+            ? sourceCode.trim()
+            : null,
+
+        speech_transcript:
+          speechTranscript.trim()
+            ? speechTranscript.trim()
+            : null,
+
+        speech_audio_reference: null,
+        speech_audio_retained: false,
+
+        speech_processing_status:
+          speechTranscript.trim()
+            ? "completed"
+            : "not_provided",
+
+        input_modality:
+          inputModality,
+
+        input_language:
+          normalizeInputLanguage(
+            inputLanguage
+          ),
+
+        detected_language: null,
+
+        selected_language:
+          selectedLanguage,
+
+        response_time_seconds:
+          responseTimeSeconds,
+      };
+
       const result =
         await createRetryAttempt(
           parentAttemptId,
           studentAliasId,
-          {
-            final_answer:
-              finalAnswer.trim()
-                ? finalAnswer.trim()
-                : null,
-
-            written_reasoning:
-              normalizedReasoning,
-
-            source_code:
-              sourceCode.trim()
-                ? sourceCode.trim()
-                : null,
-
-            speech_transcript:
-              speechTranscript.trim()
-                ? speechTranscript.trim()
-                : null,
-
-            selected_language:
-              selectedLanguage,
-
-            response_time_seconds:
-              responseTimeSeconds,
-          }
+          retryPayload
         );
 
       setCreatedRetry(result);
@@ -667,6 +825,33 @@ export default function RetryPanel({
           </label>
 
           <label className="form-field">
+            <span>Input language</span>
+
+            <select
+              value={inputLanguage}
+              onChange={(event) =>
+                setInputLanguage(
+                  normalizeInputLanguage(
+                    event.target.value
+                  )
+                )
+              }
+              disabled={submitting}
+            >
+              {INPUT_LANGUAGE_OPTIONS.map(
+                (option) => (
+                  <option
+                    value={option.value}
+                    key={option.value}
+                  >
+                    {option.label}
+                  </option>
+                )
+              )}
+            </select>
+          </label>
+
+          <label className="form-field">
             <span>Response time</span>
 
             <input
@@ -676,9 +861,23 @@ export default function RetryPanel({
             />
           </label>
 
+          <label className="form-field">
+            <span>Detected modality</span>
+
+            <input
+              value={
+                formatInputModality(
+                  inputModality
+                )
+              }
+              readOnly
+              aria-label="Retry detected input modality"
+            />
+          </label>
+
           <label className="form-field full-width">
             <span>
-              Speech transcript optional
+              Speech transcript (optional)
             </span>
 
             <textarea
@@ -688,7 +887,7 @@ export default function RetryPanel({
                   event.target.value
                 )
               }
-              placeholder="Paste a revised speech transcript only if one is available."
+              placeholder="Paste or enter a revised speech transcript if one is available. Audio capture is not stored by this form."
               rows={3}
               disabled={submitting}
             />

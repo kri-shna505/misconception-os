@@ -66,23 +66,81 @@ def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
     - A normal call made outside a function is not treated as recursion.
     - Statements that explicitly reject binary search on unsorted data are not
       treated as evidence that the student is using binary search incorrectly.
+    - Sprint 10 normalized reasoning is preferred for semantic matching when
+      available, allowing language/code-switch processing to feed the existing
+      deterministic rule engine without overwriting the original submission.
     """
 
     final_answer = _safe_text(_get_attr(attempt, "final_answer"))
     written_reasoning = _safe_text(_get_attr(attempt, "written_reasoning"))
+    normalized_reasoning = _safe_text(
+        _get_attr(attempt, "normalized_reasoning")
+    )
     source_code = _safe_text(_get_attr(attempt, "source_code"))
     speech_transcript = _safe_text(_get_attr(attempt, "speech_transcript"))
+
+    # Sprint 10:
+    # Rule matching remains deterministic and English-oriented. When the
+    # language-processing layer has produced normalized reasoning, prefer that
+    # representation for semantic rule matching while preserving the student's
+    # original written_reasoning on the Attempt record for auditability.
+    reasoning_for_analysis = (
+        normalized_reasoning
+        if normalized_reasoning
+        else written_reasoning
+    )
 
     problem_statement = _safe_text(_get_attr(problem, "statement"))
     rule_context = _safe_rule_context(_get_attr(problem, "rule_context"))
 
     combined_reasoning = " ".join(
         part
-        for part in [final_answer, written_reasoning, speech_transcript]
+        for part in [
+            final_answer,
+            reasoning_for_analysis,
+            speech_transcript,
+        ]
         if part.strip()
     )
 
+    # Sprint 10 provenance: preserve the channel that supplied semantic
+    # evidence while keeping normalized reasoning preferred for matching.
+    reasoning_sources: list[tuple[EvidenceSource, str]] = []
+    if final_answer:
+        reasoning_sources.append(
+            (EvidenceSource.WRITTEN_REASONING, final_answer)
+        )
+    if reasoning_for_analysis:
+        reasoning_sources.append(
+            (EvidenceSource.WRITTEN_REASONING, reasoning_for_analysis)
+        )
+    if speech_transcript:
+        reasoning_sources.append(
+            (EvidenceSource.SPEECH_TRANSCRIPT, speech_transcript)
+        )
+
     evidence: list[RuleEvidence] = []
+
+    # Sprint 10 multimodal provenance:
+    # Preserve speech as an observable evidence channel even when the speech
+    # contains correct reasoning rather than a misconception-specific M4/M5
+    # phrase. This allows mixed-modality attempts to retain their provenance
+    # without artificially increasing rule confidence.
+    if speech_transcript:
+        evidence.append(
+            RuleEvidence(
+                source=EvidenceSource.SPEECH_TRANSCRIPT,
+                strength=EvidenceStrength.MEDIUM,
+                text=(
+                    "Speech transcript contributes reasoning evidence for "
+                    "this attempt."
+                ),
+                metadata={
+                    "matched_area": "speech_transcript",
+                    "input_channel": "speech",
+                },
+            )
+        )
 
     problem_array = _extract_problem_array(rule_context, problem_statement)
     problem_array_is_unsorted = bool(problem_array and _is_unsorted(problem_array))
@@ -122,7 +180,7 @@ def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
                 ),
                 metadata={
                     "matched_area": (
-                        "final_answer/written_reasoning/speech_transcript"
+                        "final_answer/normalized_or_written_reasoning/speech_transcript"
                     )
                 },
             )
@@ -137,6 +195,29 @@ def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
                     "used directly on the unsorted input."
                 ),
                 metadata={"binary_search_rejected": True},
+            )
+        )
+
+    # Sprint 10 fallback provenance: when normalization is unavailable,
+    # preserve written reasoning as evidence when it independently expresses
+    # recursive progress semantics used by the diagnosis pipeline.
+    if (
+        written_reasoning
+        and not normalized_reasoning
+        and _reasoning_has_recursive_progress_claim(written_reasoning)
+    ):
+        evidence.append(
+            RuleEvidence(
+                source=EvidenceSource.WRITTEN_REASONING,
+                strength=EvidenceStrength.MEDIUM,
+                text=(
+                    "Student written reasoning contributes a recursive "
+                    "progress claim used by the rule engine."
+                ),
+                metadata={
+                    "matched_area": "written_reasoning",
+                    "semantic_fallback": True,
+                },
             )
         )
 
@@ -371,7 +452,10 @@ def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
     if m5_signals["single_stack_frame_claim_detected"]:
         evidence.append(
             RuleEvidence(
-                source=EvidenceSource.WRITTEN_REASONING,
+                source=_m5_evidence_source(
+                    reasoning_sources,
+                    signal_name="single_stack_frame_claim_detected",
+                ),
                 strength=EvidenceStrength.STRONG,
                 text=(
                     "Student claims that recursive calls reuse or share a "
@@ -388,7 +472,10 @@ def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
     if m5_signals["recursive_locals_on_heap_claim_detected"]:
         evidence.append(
             RuleEvidence(
-                source=EvidenceSource.WRITTEN_REASONING,
+                source=_m5_evidence_source(
+                    reasoning_sources,
+                    signal_name="recursive_locals_on_heap_claim_detected",
+                ),
                 strength=EvidenceStrength.STRONG,
                 text=(
                     "Student claims that ordinary recursive local variables "
@@ -411,7 +498,10 @@ def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
 
         evidence.append(
             RuleEvidence(
-                source=EvidenceSource.WRITTEN_REASONING,
+                source=_m5_evidence_source(
+                    reasoning_sources,
+                    signal_name="locals_survive_return_claim_detected",
+                ),
                 strength=(
                     EvidenceStrength.MEDIUM
                     if survival_is_uncertain
@@ -437,7 +527,10 @@ def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
     if m5_signals["separate_stack_frames_understood"]:
         evidence.append(
             RuleEvidence(
-                source=EvidenceSource.WRITTEN_REASONING,
+                source=_m5_evidence_source(
+                    reasoning_sources,
+                    signal_name="separate_stack_frames_understood",
+                ),
                 strength=EvidenceStrength.STRONG,
                 text=(
                     "Each recursive call has its own stack frame."
@@ -452,7 +545,10 @@ def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
     if m5_signals["locals_end_with_frame_understood"]:
         evidence.append(
             RuleEvidence(
-                source=EvidenceSource.WRITTEN_REASONING,
+                source=_m5_evidence_source(
+                    reasoning_sources,
+                    signal_name="locals_end_with_frame_understood",
+                ),
                 strength=EvidenceStrength.STRONG,
                 text=(
                     "Local variables are removed when the call returns."
@@ -467,7 +563,10 @@ def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
     if m5_signals["stack_heap_distinction_understood"]:
         evidence.append(
             RuleEvidence(
-                source=EvidenceSource.WRITTEN_REASONING,
+                source=_m5_evidence_source(
+                    reasoning_sources,
+                    signal_name="stack_heap_distinction_understood",
+                ),
                 strength=EvidenceStrength.MEDIUM,
                 text=(
                     "Heap-allocated memory follows different lifetime rules."
@@ -481,7 +580,7 @@ def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
 
     weak_submission = _is_weak_submission(
         final_answer=final_answer,
-        written_reasoning=written_reasoning,
+        written_reasoning=reasoning_for_analysis,
         source_code=source_code,
         speech_transcript=speech_transcript,
     )
@@ -562,6 +661,47 @@ def extract_evidence(attempt: Any, problem: Any) -> EvidenceSignals:
         ],
     )
 
+
+
+
+
+def _reasoning_has_recursive_progress_claim(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", text.lower()).strip()
+    if not normalized:
+        return False
+
+    patterns = [
+        r"\brecursive\s+calls?\b.{0,100}\b(?:same|unchanged)\s+argument\b",
+        r"\brecursive\s+calls?\b.{0,100}\bwithout\b.{0,50}\b(?:reducing|decreasing|shrinking)\b",
+        r"\brecursive\s+argument\b.{0,80}\b(?:same|increase|increases|decrease|decreases|smaller|larger)\b",
+        r"\bproblem\s+size\b.{0,80}\b(?:not\s+reducing|does\s+not\s+reduce|decreases|reduces)\b",
+    ]
+    return any(
+        re.search(pattern, normalized, flags=re.DOTALL)
+        for pattern in patterns
+    )
+
+
+def _m5_evidence_source(
+    reasoning_sources: list[tuple[EvidenceSource, str]],
+    *,
+    signal_name: str,
+) -> EvidenceSource:
+    """Return the input channel that actually supplied an M5 signal."""
+
+    # Prefer speech provenance when speech independently contains the signal.
+    # This fixes speech-only and mixed text+speech attempts without changing
+    # deterministic M5 signal semantics.
+    for source, source_text in reasoning_sources:
+        if source != EvidenceSource.SPEECH_TRANSCRIPT:
+            continue
+        speech_signals = _extract_m5_signals(
+            combined_reasoning=source_text,
+        )
+        if speech_signals.get(signal_name, False):
+            return EvidenceSource.SPEECH_TRANSCRIPT
+
+    return EvidenceSource.WRITTEN_REASONING
 
 
 def _extract_m5_signals(
@@ -1224,7 +1364,10 @@ def _detect_pointer_swap(
         )
     )
 
-    return has_pointer_parameters and dereferences_both and passes_addresses
+    # An isolated function submission may not contain the call site.
+    # Pointer parameters plus dereferencing both parameters are sufficient to
+    # establish a pointer-based swap implementation.
+    return has_pointer_parameters and dereferences_both
 
 
 def _detect_return_based_swap(

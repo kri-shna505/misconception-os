@@ -10,16 +10,30 @@ from pydantic import (
 
 
 class StudentSessionCreate(BaseModel):
+    """
+    Request payload used to create a pseudonymous student session.
+
+    Sprint 10 note:
+    Natural-language selection and multimodal attempt metadata are intentionally
+    not stored on the student session. They belong to each individual attempt,
+    because a student may submit different attempts using different input
+    languages or modalities.
+    """
+
     alias: str = Field(
         ...,
         min_length=3,
         max_length=80,
-        description="Student-facing alias used for the pseudonymous session.",
+        description=(
+            "Student-facing alias used for the pseudonymous session."
+        ),
     )
 
     consent_status: bool = Field(
         ...,
-        description="Indicates whether the student consented to data collection.",
+        description=(
+            "Indicates whether the student consented to data collection."
+        ),
     )
 
     @field_validator("alias")
@@ -36,6 +50,10 @@ class StudentSessionCreate(BaseModel):
 
 
 class StudentSessionResponse(BaseModel):
+    """
+    Response returned after creating or restoring a student session.
+    """
+
     student_alias_id: UUID
     alias: str
     pseudonymous_id: str = Field(

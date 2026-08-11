@@ -20,12 +20,13 @@ app = FastAPI(
     title="MisconceptionOS API",
     description=(
         "Backend API for the MisconceptionOS DSA diagnostic tutor, including "
-        "student submissions, evidence-backed misconception diagnosis, "
-        "progressive hints, diagnostic questions, retry attempts, learning "
-        "history, teacher analytics, authentication, and teacher review "
-        "workflows."
+        "student submissions, normalized multilingual reasoning, multimodal "
+        "text/code/speech attempt metadata, evidence-backed misconception "
+        "diagnosis, progressive hints, diagnostic questions, retry attempts, "
+        "learning history, teacher analytics, authentication, and teacher "
+        "review workflows."
     ),
-    version="0.5.0",
+    version="0.6.0",
     openapi_tags=[
         {
             "name": "System",
@@ -61,13 +62,16 @@ app = FastAPI(
         {
             "name": "Attempts",
             "description": (
-                "Student-attempt submission and retrieval."
+                "Student-attempt submission and retrieval, including Sprint 10 "
+                "normalized reasoning, input-language metadata, modality metadata, "
+                "speech transcripts, and privacy-aware audio references."
             ),
         },
         {
             "name": "Diagnoses",
             "description": (
-                "Evidence extraction and rule-based misconception diagnosis."
+                "Evidence extraction and rule-based misconception diagnosis "
+                "across text, code, speech, and mixed-modality submissions."
             ),
         },
         {
@@ -95,7 +99,6 @@ app = FastAPI(
     ],
 )
 
-
 # Development CORS configuration.
 #
 # Allows the Vite frontend to run on localhost or 127.0.0.1 using any
@@ -105,9 +108,7 @@ app = FastAPI(
 # Production deployment must use an explicit origin allow-list.
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=(
-        r"^http://(localhost|127\.0\.0\.1):\d+$"
-    ),
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -132,6 +133,8 @@ def root() -> dict[str, str]:
         "health": "/api/health",
         "auth_login": "/api/auth/login",
         "auth_me": "/api/auth/me",
+        "student_attempts": "/api/attempts",
+        "diagnoses": "/api/diagnoses",
         "teacher_dashboard": "/api/teacher/dashboard",
         "teacher_reviews": "/api/teacher/reviews",
         "interventions": "/api/interventions",

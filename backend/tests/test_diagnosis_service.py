@@ -67,19 +67,34 @@ class FakeDatabase:
 def make_attempt(
     *,
     problem_id: UUID | None = None,
+    **overrides: object,
 ) -> SimpleNamespace:
-    return SimpleNamespace(
-        id=uuid4(),
-        student_alias_id=uuid4(),
-        problem_id=problem_id or uuid4(),
-        final_answer="Sample answer",
-        written_reasoning="Sample reasoning",
-        source_code="print('sample')",
-        speech_transcript=None,
-        selected_language="python",
-        response_time_seconds=30,
-        created_at=datetime.utcnow(),
-    )
+    data: dict[str, object] = {
+        "id": uuid4(),
+        "student_alias_id": uuid4(),
+        "problem_id": problem_id or uuid4(),
+        "parent_attempt_id": None,
+        "retry_number": 0,
+        "final_answer": "Sample answer",
+        "written_reasoning": "Sample reasoning",
+        "normalized_reasoning": None,
+        "source_code": "print('sample')",
+        "speech_transcript": None,
+        "speech_audio_reference": None,
+        "speech_audio_retained": False,
+        "speech_processing_status": "not_provided",
+        "input_modality": "text_code",
+        "input_language": "english",
+        "detected_language": None,
+        "selected_language": "python",
+        "response_time_seconds": 30,
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+    }
+
+    data.update(overrides)
+
+    return SimpleNamespace(**data)
 
 
 def make_problem(
@@ -210,8 +225,8 @@ def configure_new_diagnosis_flow(
     )
 
 
-def test_model_version_is_rule_v1_8() -> None:
-    assert diagnosis_service.MODEL_VERSION == "rule-v1.8"
+def test_model_version_is_rule_v1_9() -> None:
+    assert diagnosis_service.MODEL_VERSION == "rule-v1.9"
 
 
 @pytest.mark.parametrize(
@@ -422,7 +437,7 @@ def test_invalid_confidence_is_rejected(
     )
 
 
-def test_create_m4_diagnosis_persists_rule_v1_8(
+def test_create_m4_diagnosis_persists_rule_v1_9(
     monkeypatch: pytest.MonkeyPatch,
     fixed_created_at: datetime,
 ) -> None:
@@ -473,7 +488,7 @@ def test_create_m4_diagnosis_persists_rule_v1_8(
     )
     assert response.state == DiagnosisState.CONFIDENT
     assert response.confidence == 0.92
-    assert response.model_version == "rule-v1.8"
+    assert response.model_version == "rule-v1.9"
     assert response.next_action == DiagnosisNextAction.SHOW_HINT
     assert response.primary_misconception is not None
     assert response.primary_misconception.code == "M4"
@@ -489,7 +504,7 @@ def test_create_m4_diagnosis_persists_rule_v1_8(
 
     assert diagnosis_insert is not None
     assert diagnosis_insert["state"] == "confident"
-    assert diagnosis_insert["model_version"] == "rule-v1.8"
+    assert diagnosis_insert["model_version"] == "rule-v1.9"
     assert (
         diagnosis_insert["primary_misconception_id"]
         == misconception.id
@@ -544,7 +559,7 @@ def test_create_m5_diagnosis_persists_correct_primary_label(
     assert response.primary_misconception is not None
     assert response.primary_misconception.code == "M5"
     assert response.confidence == 0.91
-    assert response.model_version == "rule-v1.8"
+    assert response.model_version == "rule-v1.9"
     assert db.commit_count == 1
 
 
@@ -706,7 +721,7 @@ def test_cross_topic_detection_is_rejected(
     )
 
 
-def test_existing_rule_v1_8_diagnosis_is_returned_without_new_insert(
+def test_existing_rule_v1_9_diagnosis_is_returned_without_new_insert(
     monkeypatch: pytest.MonkeyPatch,
     fixed_created_at: datetime,
 ) -> None:
@@ -726,7 +741,7 @@ def test_existing_rule_v1_8_diagnosis_is_returned_without_new_insert(
         primary_misconception=None,
         evidence=[],
         alternatives=[],
-        model_version="rule-v1.8",
+        model_version="rule-v1.9",
         decision_reason=(
             "Existing diagnosis returned."
         ),
@@ -773,7 +788,7 @@ def test_existing_rule_v1_8_diagnosis_is_returned_without_new_insert(
 
     assert response is expected_response
     assert captured_model_versions == [
-        "rule-v1.8"
+        "rule-v1.9"
     ]
     assert db.executed == []
     assert db.commit_count == 0
@@ -884,3 +899,289 @@ def test_existing_diagnosis_next_action_mapping(
     )
 
     assert result == expected_action
+
+
+# ---------------------------------------------------------------------------
+# Sprint 10 normalized-reasoning / multimodal diagnosis integration
+# ---------------------------------------------------------------------------
+
+
+def _configure_real_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    attempt: SimpleNamespace,
+    problem: SimpleNamespace,
+    fixed_created_at: datetime,
+) -> None:
+    """
+    Keep the real Sprint 10 extractor + rule detector, while replacing only
+    persistence lookup boundaries that would otherwise require PostgreSQL.
+    """
+
+    monkeypatch.setattr(
+        diagnosis_service,
+        "_get_attempt_or_404",
+        lambda db, attempt_id: attempt,
+    )
+    monkeypatch.setattr(
+        diagnosis_service,
+        "_get_existing_diagnosis_for_attempt",
+        lambda db, attempt_id, model_version: None,
+    )
+    monkeypatch.setattr(
+        diagnosis_service,
+        "_get_problem_or_404",
+        lambda db, problem_id: problem,
+    )
+    monkeypatch.setattr(
+        diagnosis_service,
+        "_get_diagnosis_created_at",
+        lambda db, diagnosis_id: fixed_created_at,
+    )
+
+
+def test_normalized_reasoning_flows_through_real_diagnosis_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+    fixed_created_at: datetime,
+) -> None:
+    """
+    Raw reasoning contains a misconception-like statement, but Sprint 10
+    normalized reasoning corrects it. The diagnosis must use the normalized
+    representation rather than stale raw wording.
+    """
+
+    db = FakeDatabase()
+
+    problem = make_problem(
+        "P1",
+        misconception_codes=["M1"],
+    )
+    problem.statement = (
+        "Search for a target in the unsorted array [7, 2, 9, 1]."
+    )
+    problem.rule_context = {
+        "misconception_codes": ["M1"],
+        "array": [7, 2, 9, 1],
+    }
+
+    attempt = make_attempt(
+        problem_id=problem.id,
+        final_answer="Use linear search.",
+        written_reasoning=(
+            "Binary search works directly on the unsorted array."
+        ),
+        normalized_reasoning=(
+            "Binary search should not be used directly on unsorted data. "
+            "Use linear search instead."
+        ),
+        source_code="""
+int search(int a[], int n, int target) {
+    for (int i = 0; i < n; i++) {
+        if (a[i] == target) return i;
+    }
+    return -1;
+}
+""",
+        speech_transcript=None,
+        input_modality="text_code",
+        input_language="telugu",
+        detected_language="telugu",
+        selected_language="c",
+    )
+
+    _configure_real_pipeline(
+        monkeypatch,
+        attempt=attempt,
+        problem=problem,
+        fixed_created_at=fixed_created_at,
+    )
+
+    response = diagnosis_service.create_diagnosis_from_attempt(
+        db=db,
+        attempt_id=attempt.id,
+    )
+
+    assert response.model_version == "rule-v1.9"
+    assert response.state == DiagnosisState.NO_MISCONCEPTION
+    assert response.primary_misconception is None
+    assert response.next_action == DiagnosisNextAction.NO_ACTION
+    assert db.commit_count == 1
+
+
+def test_speech_only_m5_misconception_flows_through_real_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+    fixed_created_at: datetime,
+) -> None:
+    db = FakeDatabase()
+
+    problem = make_problem(
+        "P5",
+        misconception_codes=["M5"],
+    )
+    problem.statement = (
+        "Explain stack frames and heap allocation during recursion."
+    )
+
+    attempt = make_attempt(
+        problem_id=problem.id,
+        final_answer=None,
+        written_reasoning="",
+        normalized_reasoning=None,
+        source_code="",
+        speech_transcript=(
+            "Recursive calls reuse one stack frame and local variables "
+            "remain after the function returns."
+        ),
+        input_modality="speech",
+        input_language="english",
+        detected_language="english",
+        speech_processing_status="completed",
+    )
+
+    misconception = make_misconception("M5")
+
+    _configure_real_pipeline(
+        monkeypatch,
+        attempt=attempt,
+        problem=problem,
+        fixed_created_at=fixed_created_at,
+    )
+    monkeypatch.setattr(
+        diagnosis_service,
+        "_get_misconception_by_code_or_404",
+        lambda db, code: misconception,
+    )
+
+    response = diagnosis_service.create_diagnosis_from_attempt(
+        db=db,
+        attempt_id=attempt.id,
+    )
+
+    assert response.model_version == "rule-v1.9"
+    assert response.state == DiagnosisState.CONFIDENT
+    assert response.primary_misconception is not None
+    assert response.primary_misconception.code == "M5"
+    assert response.next_action == DiagnosisNextAction.SHOW_HINT
+    assert any(
+        item.source == EvidenceSource.SPEECH_TRANSCRIPT
+        for item in response.evidence
+    )
+    assert db.commit_count == 1
+
+
+def test_correct_speech_only_m5_explanation_returns_no_misconception(
+    monkeypatch: pytest.MonkeyPatch,
+    fixed_created_at: datetime,
+) -> None:
+    db = FakeDatabase()
+
+    problem = make_problem(
+        "P5",
+        misconception_codes=["M5"],
+    )
+    problem.statement = (
+        "Explain stack frames and heap allocation during recursion."
+    )
+
+    attempt = make_attempt(
+        problem_id=problem.id,
+        final_answer=None,
+        written_reasoning="",
+        normalized_reasoning=None,
+        source_code="",
+        speech_transcript=(
+            "Each recursive call has its own stack frame. "
+            "The stack frame is removed when the call returns, and "
+            "ordinary local variables are not stored on the heap."
+        ),
+        input_modality="speech",
+        input_language="english",
+        detected_language="english",
+        speech_processing_status="completed",
+    )
+
+    _configure_real_pipeline(
+        monkeypatch,
+        attempt=attempt,
+        problem=problem,
+        fixed_created_at=fixed_created_at,
+    )
+
+    response = diagnosis_service.create_diagnosis_from_attempt(
+        db=db,
+        attempt_id=attempt.id,
+    )
+
+    assert response.model_version == "rule-v1.9"
+    assert response.state == DiagnosisState.NO_MISCONCEPTION
+    assert response.primary_misconception is None
+    assert response.next_action == DiagnosisNextAction.NO_ACTION
+    assert any(
+        item.source == EvidenceSource.SPEECH_TRANSCRIPT
+        for item in response.evidence
+    )
+    assert db.commit_count == 1
+
+
+def test_mixed_text_code_speech_recursion_pipeline_preserves_speech_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    fixed_created_at: datetime,
+) -> None:
+    db = FakeDatabase()
+
+    problem = make_problem(
+        "P3",
+        misconception_codes=["M2", "M3"],
+    )
+    problem.statement = "Compute the recursive sum of N numbers."
+
+    attempt = make_attempt(
+        problem_id=problem.id,
+        final_answer="The recursive call should use n - 1.",
+        written_reasoning=(
+            "The call must move toward the stopping condition."
+        ),
+        normalized_reasoning=(
+            "The recursive argument must decrease toward the base case."
+        ),
+        source_code="""
+int sum(int n) {
+    if (n <= 0) return 0;
+    return n + sum(n - 1);
+}
+""",
+        speech_transcript=(
+            "Each call uses a smaller argument until the base case."
+        ),
+        input_modality="text_code_speech",
+        input_language="telugu",
+        detected_language="telugu",
+        speech_processing_status="completed",
+        selected_language="c",
+    )
+
+    _configure_real_pipeline(
+        monkeypatch,
+        attempt=attempt,
+        problem=problem,
+        fixed_created_at=fixed_created_at,
+    )
+
+    response = diagnosis_service.create_diagnosis_from_attempt(
+        db=db,
+        attempt_id=attempt.id,
+    )
+
+    assert response.model_version == "rule-v1.9"
+    assert response.state == DiagnosisState.NO_MISCONCEPTION
+    assert response.primary_misconception is None
+    assert response.next_action == DiagnosisNextAction.NO_ACTION
+    assert any(
+        item.source == EvidenceSource.SOURCE_CODE
+        for item in response.evidence
+    )
+    assert any(
+        item.source == EvidenceSource.SPEECH_TRANSCRIPT
+        for item in response.evidence
+    )
+    assert db.commit_count == 1

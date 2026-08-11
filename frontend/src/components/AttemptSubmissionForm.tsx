@@ -40,6 +40,21 @@ const LANGUAGE_OPTIONS = [
   { value: "text", label: "Text / no code" },
 ] as const;
 
+const INPUT_LANGUAGE_OPTIONS = [
+  { value: "english", label: "English" },
+  { value: "telugu", label: "Telugu" },
+  { value: "hindi", label: "Hindi" },
+] as const;
+
+type InputModality =
+  | "text"
+  | "code"
+  | "speech"
+  | "text_code"
+  | "text_speech"
+  | "code_speech"
+  | "text_code_speech";
+
 function formatConfidence(value: number) {
   const safeValue = Number.isFinite(value) ? value : 0;
   return `${Math.round(safeValue * 100)}%`;
@@ -103,6 +118,88 @@ function getLanguageLabel(value?: string | null) {
     LANGUAGE_OPTIONS.find((option) => option.value === normalized)?.label ??
     normalized
   );
+}
+
+function normalizeInputLanguage(value?: string | null) {
+  const normalized = value?.trim().toLowerCase();
+
+  if (
+    normalized === "telugu" ||
+    normalized === "te" ||
+    normalized === "tel"
+  ) {
+    return "telugu";
+  }
+
+  if (
+    normalized === "hindi" ||
+    normalized === "hi" ||
+    normalized === "hin"
+  ) {
+    return "hindi";
+  }
+
+  return "english";
+}
+
+function getInputLanguageLabel(value?: string | null) {
+  const normalized = normalizeInputLanguage(value);
+
+  return (
+    INPUT_LANGUAGE_OPTIONS.find(
+      (option) => option.value === normalized
+    )?.label ?? normalized
+  );
+}
+
+function deriveInputModality({
+  hasText,
+  hasCode,
+  hasSpeech,
+}: {
+  hasText: boolean;
+  hasCode: boolean;
+  hasSpeech: boolean;
+}): InputModality {
+  if (hasText && hasCode && hasSpeech) {
+    return "text_code_speech";
+  }
+
+  if (hasText && hasCode) {
+    return "text_code";
+  }
+
+  if (hasText && hasSpeech) {
+    return "text_speech";
+  }
+
+  if (hasCode && hasSpeech) {
+    return "code_speech";
+  }
+
+  if (hasSpeech) {
+    return "speech";
+  }
+
+  if (hasCode) {
+    return "code";
+  }
+
+  return "text";
+}
+
+function formatInputModality(value?: string | null) {
+  if (!value) {
+    return "Text";
+  }
+
+  return value
+    .split("_")
+    .map(
+      (part) =>
+        `${part.charAt(0).toUpperCase()}${part.slice(1)}`
+    )
+    .join(" + ");
 }
 
 function getCodePlaceholder(language: string) {
@@ -261,6 +358,7 @@ export default function AttemptSubmissionForm({
   const [writtenReasoning, setWrittenReasoning] = useState("");
   const [sourceCode, setSourceCode] = useState("");
   const [speechTranscript, setSpeechTranscript] = useState("");
+  const [inputLanguage, setInputLanguage] = useState("english");
 
   const [selectedLanguage, setSelectedLanguage] = useState(() =>
     normalizeLanguage(expectedLanguage)
@@ -302,6 +400,7 @@ export default function AttemptSubmissionForm({
     setWrittenReasoning("");
     setSourceCode("");
     setSpeechTranscript("");
+    setInputLanguage("english");
 
     setSubmittedAttempt(null);
     setDiagnosis(null);
@@ -350,6 +449,14 @@ export default function AttemptSubmissionForm({
     finalAnswer.trim().length > 0 ||
     sourceCode.trim().length > 0 ||
     speechTranscript.trim().length > 0;
+
+  const currentInputModality = deriveInputModality({
+    hasText:
+      finalAnswer.trim().length > 0 ||
+      writtenReasoning.trim().length > 0,
+    hasCode: sourceCode.trim().length > 0,
+    hasSpeech: speechTranscript.trim().length > 0,
+  });
 
   const canSaveAttempt =
     hasRequiredReasoning &&
@@ -409,6 +516,19 @@ export default function AttemptSubmissionForm({
           : null,
         selected_language: selectedLanguage,
         response_time_seconds: responseTimeSeconds,
+
+        // Sprint 10 multimodal/language contract.
+        // Normalized reasoning is produced by the backend processing layer;
+        // the student UI should not ask the learner to manufacture it.
+        normalized_reasoning: null,
+        speech_audio_reference: null,
+        speech_audio_retained: false,
+        speech_processing_status: speechTranscript.trim()
+          ? "completed"
+          : "not_provided",
+        input_modality: currentInputModality,
+        input_language: normalizeInputLanguage(inputLanguage),
+        detected_language: null,
       });
 
       setSubmittedAttempt(result);
@@ -529,6 +649,7 @@ export default function AttemptSubmissionForm({
     setWrittenReasoning("");
     setSourceCode("");
     setSpeechTranscript("");
+    setInputLanguage("english");
 
     setSelectedLanguage(normalizeLanguage(expectedLanguage));
     setStartedAt(Date.now());
@@ -580,6 +701,25 @@ export default function AttemptSubmissionForm({
                 {submittedAttempt?.response_time_seconds ??
                   responseTimeSeconds}
                 s
+              </strong>
+            </div>
+
+            <div>
+              <span>Input language</span>
+              <strong>
+                {getInputLanguageLabel(
+                  submittedAttempt?.input_language ?? inputLanguage
+                )}
+              </strong>
+            </div>
+
+            <div>
+              <span>Modality</span>
+              <strong>
+                {formatInputModality(
+                  submittedAttempt?.input_modality ??
+                    currentInputModality
+                )}
               </strong>
             </div>
 
@@ -961,6 +1101,25 @@ export default function AttemptSubmissionForm({
         </label>
 
         <label className="form-field">
+          <span>Input language</span>
+
+          <select
+            value={inputLanguage}
+            onChange={(event) =>
+              setInputLanguage(
+                normalizeInputLanguage(event.target.value)
+              )
+            }
+          >
+            {INPUT_LANGUAGE_OPTIONS.map((option) => (
+              <option value={option.value} key={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="form-field">
           <span>Response time</span>
 
           <input
@@ -970,13 +1129,23 @@ export default function AttemptSubmissionForm({
           />
         </label>
 
+        <label className="form-field">
+          <span>Detected modality</span>
+
+          <input
+            value={formatInputModality(currentInputModality)}
+            readOnly
+            aria-label="Detected input modality"
+          />
+        </label>
+
         <label className="form-field full-width">
-          <span>Speech transcript optional</span>
+          <span>Speech transcript (optional)</span>
 
           <textarea
             value={speechTranscript}
             onChange={(event) => setSpeechTranscript(event.target.value)}
-            placeholder="Paste a speech transcript only if one is available."
+            placeholder="Paste or enter a speech transcript if one is available. Audio capture is not stored by this form."
             rows={3}
           />
         </label>

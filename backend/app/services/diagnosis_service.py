@@ -22,7 +22,7 @@ from app.services.evidence_extractor import extract_evidence
 from app.services.rule_detector import detect_misconception
 
 
-MODEL_VERSION = "rule-v1.8"
+MODEL_VERSION = "rule-v1.9"
 
 
 # Diagnosis must remain inside the misconception taxonomy configured for the
@@ -65,8 +65,14 @@ def create_diagnosis_from_attempt(
     - Supports the P1-P5 evidence/rule pipeline across the source-language
       patterns handled by evidence_extractor.py (including Python and C/C++).
     - Preserves deterministic M4/M5 evidence-backed diagnosis behavior.
-    - Uses rule-v1.8 so fresh Sprint 9 P1-P4 correction logic does not reuse
-      stale diagnosis snapshots created by earlier rule versions.
+
+    Sprint 10 integration:
+    - Loads normalized reasoning and multimodal/language metadata from attempts.
+    - Delegates semantic evidence selection to evidence_extractor.py so
+      normalized reasoning can be used without overwriting original student text.
+    - Keeps source-code analysis bound to the selected programming submission.
+    - Uses rule-v1.9 so Sprint 10 evidence semantics do not reuse stale
+      rule-v1.8 diagnosis snapshots.
     """
 
     attempt = _get_attempt_or_404(db, attempt_id)
@@ -1959,6 +1965,15 @@ def _next_action_for_existing_diagnosis(
 
 
 def _get_attempt_or_404(db: Session, attempt_id: UUID) -> SimpleNamespace:
+    """
+    Load the complete attempt contract required by the diagnosis pipeline.
+
+    Sprint 10 includes normalized reasoning plus multimodal/language metadata.
+    The evidence extractor decides which reasoning representation contributes
+    to deterministic misconception signals; this service keeps the original
+    attempt data intact.
+    """
+
     row = db.execute(
         text(
             """
@@ -1966,13 +1981,23 @@ def _get_attempt_or_404(db: Session, attempt_id: UUID) -> SimpleNamespace:
                 id,
                 student_alias_id,
                 problem_id,
+                parent_attempt_id,
+                retry_number,
                 final_answer,
                 written_reasoning,
+                normalized_reasoning,
                 source_code,
                 speech_transcript,
+                speech_audio_reference,
+                speech_audio_retained,
+                speech_processing_status,
+                input_modality,
+                input_language,
+                detected_language,
                 selected_language,
                 response_time_seconds,
-                created_at
+                created_at,
+                updated_at
             FROM attempts
             WHERE id = :attempt_id
             """

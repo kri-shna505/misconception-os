@@ -221,20 +221,53 @@ function createFormState(
   const systemDiagnosis =
     detail.system_diagnosis;
 
+  const acceptingSystemDiagnosis =
+    review?.decision === "accepted" &&
+    Boolean(systemDiagnosis);
+
+  const resolvedFinalState =
+    acceptingSystemDiagnosis
+      ? systemDiagnosis?.state ?? ""
+      : (
+          review?.final_state ??
+          systemDiagnosis?.state ??
+          ""
+        );
+
+  const resolvedFinalMisconceptionId =
+    acceptingSystemDiagnosis
+      ? (
+          systemDiagnosis?.state ===
+            "no_misconception"
+            ? ""
+            : (
+                systemDiagnosis
+                  ?.primary_misconception_id ??
+                ""
+              )
+        )
+      : (
+          resolvedFinalState ===
+            "no_misconception"
+            ? ""
+            : (
+                review?.final_misconception_id ??
+                systemDiagnosis
+                  ?.primary_misconception_id ??
+                ""
+              )
+        );
+
   return {
     decision:
       review?.decision ??
       "",
 
     finalState:
-      review?.final_state ??
-      systemDiagnosis?.state ??
-      "",
+      resolvedFinalState,
 
     finalMisconceptionId:
-      review?.final_misconception_id ??
-      systemDiagnosis?.primary_misconception_id ??
-      "",
+      resolvedFinalMisconceptionId,
 
     overrideReason:
       review?.override_reason ??
@@ -423,6 +456,47 @@ function isFinalized(
 }
 
 
+function diagnosisStateRequiresMisconceptionId(
+  state: DiagnosisState | "",
+): boolean {
+  return (
+    state === "confident" ||
+    state === "possible"
+  );
+}
+
+
+function validateStateMisconceptionPair(
+  state: DiagnosisState | "",
+  misconceptionId: string,
+): string | null {
+  const normalizedMisconceptionId =
+    misconceptionId.trim();
+
+  if (
+    state === "no_misconception" &&
+    normalizedMisconceptionId
+  ) {
+    return (
+      "A no-misconception decision cannot " +
+      "include a misconception ID."
+    );
+  }
+
+  if (
+    diagnosisStateRequiresMisconceptionId(state) &&
+    !normalizedMisconceptionId
+  ) {
+    return (
+      "Confident and possible outcomes require " +
+      "a final misconception ID."
+    );
+  }
+
+  return null;
+}
+
+
 function validateOverride(
   form: ReviewFormState,
 ): string | null {
@@ -439,15 +513,14 @@ function validateOverride(
     );
   }
 
-  if (
-    form.finalState ===
-      "no_misconception" &&
-    form.finalMisconceptionId.trim()
-  ) {
-    return (
-      "A no-misconception decision cannot " +
-      "include a misconception ID."
+  const stateValidationError =
+    validateStateMisconceptionPair(
+      form.finalState,
+      form.finalMisconceptionId,
     );
+
+  if (stateValidationError) {
+    return stateValidationError;
   }
 
   return null;
@@ -481,15 +554,14 @@ function validateFinalize(
     );
   }
 
-  if (
-    form.finalState ===
-      "no_misconception" &&
-    form.finalMisconceptionId.trim()
-  ) {
-    return (
-      "A no-misconception decision cannot " +
-      "include a misconception ID."
+  const stateValidationError =
+    validateStateMisconceptionPair(
+      form.finalState,
+      form.finalMisconceptionId,
     );
+
+  if (stateValidationError) {
+    return stateValidationError;
   }
 
   return null;
@@ -683,9 +755,10 @@ export function TeacherReviewDetailPage() {
       }
 
       if (
-        form.finalState ===
-          "no_misconception" &&
-        form.finalMisconceptionId.trim()
+        validateStateMisconceptionPair(
+          form.finalState,
+          form.finalMisconceptionId,
+        )
       ) {
         return false;
       }
@@ -842,6 +915,40 @@ export function TeacherReviewDetailPage() {
       return;
     }
 
+    const acceptedSystemState =
+      form.decision === "accepted"
+        ? systemDiagnosis?.state ?? null
+        : null;
+
+    const resolvedFinalState =
+      (
+        acceptedSystemState ??
+        form.finalState
+      ) ||
+      null;
+
+    const resolvedFinalMisconceptionId =
+      form.decision === "accepted"
+        ? (
+            systemDiagnosis?.state ===
+              "no_misconception"
+              ? null
+              : (
+                  systemDiagnosis
+                    ?.primary_misconception_id ??
+                  null
+                )
+          )
+        : (
+            resolvedFinalState ===
+              "no_misconception"
+              ? null
+              : (
+                  form.finalMisconceptionId.trim() ||
+                  null
+                )
+          );
+
     const request:
       SaveTeacherReviewDraftRequest = {
         status: "in_review",
@@ -851,17 +958,10 @@ export function TeacherReviewDetailPage() {
           null,
 
         final_state:
-          form.finalState ||
-          null,
+          resolvedFinalState,
 
         final_misconception_id:
-          form.finalState ===
-          "no_misconception"
-            ? null
-            : (
-                form.finalMisconceptionId.trim() ||
-                null
-              ),
+          resolvedFinalMisconceptionId,
 
         override_reason:
           form.overrideReason.trim() ||
@@ -891,6 +991,24 @@ export function TeacherReviewDetailPage() {
     ) {
       return;
     }
+
+    setForm(
+      (current) => ({
+        ...current,
+        decision: "accepted",
+        finalState: systemDiagnosis.state,
+        finalMisconceptionId:
+          systemDiagnosis.state ===
+            "no_misconception"
+            ? ""
+            : (
+                systemDiagnosis
+                  .primary_misconception_id ??
+                ""
+              ),
+        overrideReason: "",
+      }),
+    );
 
     await runMutation(
       "accept",
@@ -978,22 +1096,49 @@ export function TeacherReviewDetailPage() {
       return;
     }
 
+    const acceptedSystemState =
+      form.decision === "accepted"
+        ? systemDiagnosis?.state ?? null
+        : null;
+
+    const resolvedFinalState =
+      (
+        acceptedSystemState ??
+        form.finalState
+      ) as DiagnosisState;
+
+    const resolvedFinalMisconceptionId =
+      form.decision === "accepted"
+        ? (
+            systemDiagnosis?.state ===
+              "no_misconception"
+              ? null
+              : (
+                  systemDiagnosis
+                    ?.primary_misconception_id ??
+                  null
+                )
+          )
+        : (
+            resolvedFinalState ===
+              "no_misconception"
+              ? null
+              : (
+                  form.finalMisconceptionId.trim() ||
+                  null
+                )
+          );
+
     const request:
       FinalizeTeacherReviewRequest = {
         decision:
           form.decision as TeacherReviewDecision,
 
         final_state:
-          form.finalState as DiagnosisState,
+          resolvedFinalState,
 
         final_misconception_id:
-          form.finalState ===
-          "no_misconception"
-            ? null
-            : (
-                form.finalMisconceptionId.trim() ||
-                null
-              ),
+          resolvedFinalMisconceptionId,
 
         override_reason:
           form.decision ===
@@ -1653,7 +1798,10 @@ export function TeacherReviewDetailPage() {
 
               <select
                 value={form.finalState}
-                disabled={isMutating}
+                disabled={
+                  isMutating ||
+                  form.decision === "accepted"
+                }
                 onChange={(event) => {
                   const value =
                     event.target.value as
@@ -1705,10 +1853,17 @@ export function TeacherReviewDetailPage() {
                 }
                 disabled={
                   isMutating ||
+                  form.decision === "accepted" ||
                   form.finalState ===
                     "no_misconception"
                 }
-                placeholder="Optional misconception UUID"
+                placeholder={
+                  diagnosisStateRequiresMisconceptionId(
+                    form.finalState,
+                  )
+                    ? "Required misconception UUID"
+                    : "Optional misconception UUID"
+                }
                 onChange={(event) => {
                   updateForm(
                     "finalMisconceptionId",

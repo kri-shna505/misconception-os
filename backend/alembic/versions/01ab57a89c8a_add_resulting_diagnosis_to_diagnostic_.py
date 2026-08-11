@@ -13,7 +13,6 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-# revision identifiers, used by Alembic.
 revision: str = "01ab57a89c8a"
 down_revision: Union[str, Sequence[str], None] = "8886fd8af97d"
 branch_labels: Union[str, Sequence[str], None] = None
@@ -21,13 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """
-    Add the follow-up diagnosis link used by Sprint 9 diagnostic
-    question re-evaluation.
-
-    The column is nullable because existing and unevaluated diagnostic
-    responses do not yet have a resulting diagnosis.
-    """
+    """Add the follow-up diagnosis link used by Sprint 9 re-evaluation."""
 
     op.add_column(
         "diagnostic_responses",
@@ -63,18 +56,13 @@ def upgrade() -> None:
     op.create_index(
         "ix_diagnostic_responses_resulting_diagnosis_created_at",
         "diagnostic_responses",
-        [
-            "resulting_diagnosis_id",
-            "created_at",
-        ],
+        ["resulting_diagnosis_id", "created_at"],
         unique=False,
     )
 
 
 def downgrade() -> None:
-    """
-    Remove the follow-up diagnosis link and its supporting database objects.
-    """
+    """Remove the follow-up diagnosis link and supporting database objects."""
 
     op.drop_index(
         "ix_diagnostic_responses_resulting_diagnosis_created_at",

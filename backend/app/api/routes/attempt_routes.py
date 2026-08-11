@@ -24,8 +24,9 @@ router = APIRouter(
     summary="Submit student attempt",
     description=(
         "Create and persist a student attempt containing the final answer, "
-        "written reasoning, optional source code, optional speech transcript, "
-        "selected language, and response time."
+        "written reasoning, optional normalized reasoning, optional source "
+        "code, optional speech transcript, Sprint 10 multimodal metadata, "
+        "natural-language metadata, programming language, and response time."
     ),
     response_description="The saved student attempt.",
 )
@@ -37,7 +38,8 @@ def submit_attempt(
     Save a new student attempt.
 
     Validation of the student alias, consent status, problem availability,
-    and attempt contents is handled by the attempt service.
+    attempt contents, multimodal metadata, speech-processing state, and
+    language metadata is handled by the attempt service.
     """
 
     return create_attempt(
@@ -52,8 +54,9 @@ def submit_attempt(
     status_code=status.HTTP_200_OK,
     summary="Get attempt by ID",
     description=(
-        "Retrieve one saved student attempt by its UUID. "
-        "A 404 response is returned when the attempt does not exist."
+        "Retrieve one saved student attempt by its UUID, including Sprint 10 "
+        "multimodal and language-processing metadata. A 404 response is "
+        "returned when the attempt does not exist."
     ),
     response_description="The requested student attempt.",
 )
@@ -64,8 +67,8 @@ def get_attempt(
     """
     Retrieve a single saved attempt.
 
-    This endpoint supports the existing student workflow and may also be
-    reused internally by teacher-facing review services.
+    This endpoint supports the student workflow and may also be reused by
+    diagnosis, intervention, retry, and teacher-facing review services.
     """
 
     return get_attempt_by_id(

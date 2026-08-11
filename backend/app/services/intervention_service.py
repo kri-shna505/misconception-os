@@ -385,6 +385,14 @@ def create_retry_attempt(
 
     The parent must belong to the same student. The new attempt automatically
     inherits the original problem and increments the retry number.
+
+    Sprint 10:
+    - retry attempts preserve multimodal/language metadata when the retry schema
+      does not explicitly override it;
+    - normalized reasoning and speech-processing metadata are persisted with the
+      retry so diagnosis can use the same evidence contract as original attempts;
+    - raw-audio retention remains privacy-aware and defaults to the request value
+      when provided, otherwise to the parent attempt value.
     """
 
     parent_attempt = db.execute(
@@ -426,11 +434,95 @@ def create_retry_attempt(
         retry_number=retry_number,
         final_answer=request.final_answer,
         written_reasoning=request.written_reasoning,
+        normalized_reasoning=getattr(
+            request,
+            "normalized_reasoning",
+            None,
+        ),
         source_code=request.source_code,
         speech_transcript=request.speech_transcript,
+        speech_audio_reference=getattr(
+            request,
+            "speech_audio_reference",
+            None,
+        ),
+        speech_audio_retained=bool(
+            getattr(
+                request,
+                "speech_audio_retained",
+                getattr(
+                    parent_attempt,
+                    "speech_audio_retained",
+                    False,
+                ),
+            )
+        ),
+        speech_processing_status=(
+            getattr(
+                request,
+                "speech_processing_status",
+                None,
+            )
+            or getattr(
+                parent_attempt,
+                "speech_processing_status",
+                "not_provided",
+            )
+            or "not_provided"
+        ),
+        input_modality=(
+            getattr(
+                request,
+                "input_modality",
+                None,
+            )
+            or getattr(
+                parent_attempt,
+                "input_modality",
+                "text",
+            )
+            or "text"
+        ),
+        input_language=(
+            getattr(
+                request,
+                "input_language",
+                None,
+            )
+            or getattr(
+                parent_attempt,
+                "input_language",
+                "english",
+            )
+            or "english"
+        ),
+        detected_language=(
+            getattr(
+                request,
+                "detected_language",
+                None,
+            )
+            or getattr(
+                parent_attempt,
+                "detected_language",
+                None,
+            )
+        ),
         selected_language=request.selected_language,
         response_time_seconds=request.response_time_seconds,
     )
+
+    if (
+        retry_attempt.speech_audio_retained
+        and not retry_attempt.speech_audio_reference
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "speech_audio_reference is required when "
+                "speech_audio_retained is true."
+            ),
+        )
 
     db.add(retry_attempt)
 
@@ -445,15 +537,43 @@ def create_retry_attempt(
             detail="Unable to create the retry attempt.",
         ) from exc
 
+    response_data = {
+        "id": retry_attempt.id,
+        "student_alias_id": retry_attempt.student_alias_id,
+        "problem_id": retry_attempt.problem_id,
+        "parent_attempt_id": retry_attempt.parent_attempt_id,
+        "retry_number": retry_attempt.retry_number,
+        "selected_language": retry_attempt.selected_language,
+        "response_time_seconds": retry_attempt.response_time_seconds,
+        "created_at": retry_attempt.created_at,
+    }
+
+    # Sprint 10 response schemas may expose these fields. Keep construction
+    # backward-compatible with the existing Sprint 9 RetryAttemptResponse.
+    optional_response_fields = {
+        "normalized_reasoning": retry_attempt.normalized_reasoning,
+        "speech_transcript": retry_attempt.speech_transcript,
+        "speech_audio_reference": retry_attempt.speech_audio_reference,
+        "speech_audio_retained": retry_attempt.speech_audio_retained,
+        "speech_processing_status": retry_attempt.speech_processing_status,
+        "input_modality": retry_attempt.input_modality,
+        "input_language": retry_attempt.input_language,
+        "detected_language": retry_attempt.detected_language,
+        "updated_at": retry_attempt.updated_at,
+    }
+
+    schema_fields = getattr(
+        RetryAttemptResponse,
+        "model_fields",
+        {},
+    )
+
+    for field_name, field_value in optional_response_fields.items():
+        if field_name in schema_fields:
+            response_data[field_name] = field_value
+
     return RetryAttemptResponse(
-        id=retry_attempt.id,
-        student_alias_id=retry_attempt.student_alias_id,
-        problem_id=retry_attempt.problem_id,
-        parent_attempt_id=retry_attempt.parent_attempt_id,
-        retry_number=retry_attempt.retry_number,
-        selected_language=retry_attempt.selected_language,
-        response_time_seconds=retry_attempt.response_time_seconds,
-        created_at=retry_attempt.created_at,
+        **response_data,
     )
 
 
@@ -760,6 +880,11 @@ def get_learning_history(
 
     This keeps the learning-history UI correct even when an attempt contains
     an original diagnosis plus one or more immutable follow-up diagnoses.
+
+    Sprint 10 keeps this history model attempt-centric while multimodal and
+    language metadata remain available on the underlying Attempt record. The
+    response schema can expose those fields incrementally without changing
+    evolution semantics.
     """
 
     attempt_query = select(Attempt).where(

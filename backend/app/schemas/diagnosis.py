@@ -21,8 +21,16 @@ class DiagnosisState(str, Enum):
 
 
 class EvidenceSource(str, Enum):
+    """
+    Origin of an observable diagnosis evidence item.
+
+    Sprint 10 adds NORMALIZED_REASONING so translated/normalized reasoning can
+    be distinguished from the student's original written explanation.
+    """
+
     PROBLEM = "problem"
     WRITTEN_REASONING = "written_reasoning"
+    NORMALIZED_REASONING = "normalized_reasoning"
     SOURCE_CODE = "source_code"
     SPEECH_TRANSCRIPT = "speech_transcript"
     RULE_ENGINE = "rule_engine"
@@ -150,8 +158,9 @@ class DiagnosisCreate(BaseModel):
     """
     Request schema used when a diagnosis is created explicitly.
 
-    Sprint 8 uses rule-v1.4 so M4 and M5 results remain distinguishable from
-    earlier rule-v1.3 diagnoses generated before the expanded taxonomy.
+    Sprint 10 uses rule-v1.9 so diagnoses created under normalized-reasoning
+    and multimodal evidence semantics remain distinguishable from earlier
+    Sprint 9 rule-v1.8 diagnosis snapshots.
     """
 
     model_config = ConfigDict(
@@ -170,7 +179,7 @@ class DiagnosisCreate(BaseModel):
     primary_misconception_id: UUID | None = None
 
     model_version: str = Field(
-        default="rule-v1.4",
+        default="rule-v1.9",
         min_length=1,
         max_length=80,
     )
@@ -303,9 +312,11 @@ class RuleDetectionResult(BaseModel):
     """
     Structured output contract for the rule detector.
 
-    This contract is shared by M1-M5. Confident and possible outputs must carry
-    a misconception code, while insufficient and no-misconception outputs must
-    not carry one.
+    This contract is shared by M1-M5 and remains modality-agnostic. Sprint 10
+    evidence may originate from original reasoning, normalized reasoning, source
+    code, or speech transcripts after extraction. Confident and possible outputs
+    must carry a misconception code, while insufficient and no-misconception
+    outputs must not carry one.
     """
 
     model_config = ConfigDict(

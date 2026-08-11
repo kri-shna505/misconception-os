@@ -12,6 +12,24 @@ export type MisconceptionEvolutionState =
   | "uncertain";
 
 
+export type SpeechProcessingStatus =
+  | "not_provided"
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed";
+
+
+export type InputModality =
+  | "text"
+  | "code"
+  | "speech"
+  | "text_code"
+  | "text_speech"
+  | "code_speech"
+  | "text_code_speech";
+
+
 export type HintTemplateSummary = {
   id: string;
   misconception_id: string;
@@ -113,8 +131,19 @@ export type DiagnosticReevaluationResponse = {
 export type RetryAttemptCreate = {
   final_answer?: string | null;
   written_reasoning: string;
+  normalized_reasoning?: string | null;
+
   source_code?: string | null;
+
   speech_transcript?: string | null;
+  speech_audio_reference?: string | null;
+  speech_audio_retained?: boolean;
+  speech_processing_status?: SpeechProcessingStatus;
+
+  input_modality: InputModality;
+  input_language: string;
+  detected_language?: string | null;
+
   selected_language: string;
   response_time_seconds?: number | null;
 };
@@ -128,10 +157,26 @@ export type RetryAttemptResponse = {
   parent_attempt_id: string;
   retry_number: number;
 
+  final_answer?: string | null;
+  written_reasoning?: string;
+  normalized_reasoning?: string | null;
+
+  source_code?: string | null;
+
+  speech_transcript?: string | null;
+  speech_audio_reference?: string | null;
+  speech_audio_retained?: boolean;
+  speech_processing_status?: SpeechProcessingStatus;
+
+  input_modality?: InputModality;
+  input_language?: string;
+  detected_language?: string | null;
+
   selected_language: string;
   response_time_seconds: number | null;
 
   created_at: string;
+  updated_at?: string;
 };
 
 

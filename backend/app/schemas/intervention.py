@@ -453,6 +453,10 @@ class RetryAttemptCreate(BaseModel):
     Student submission used to create a retry attempt.
 
     The parent attempt is normally supplied through the route path.
+
+    Sprint 10 extends retries with normalized reasoning, language metadata,
+    speech-processing state, and privacy-aware audio references so retries use
+    the same multimodal diagnosis contract as original attempts.
     """
 
     model_config = ConfigDict(
@@ -475,9 +479,56 @@ class RetryAttemptCreate(BaseModel):
         max_length=50000,
     )
 
+    normalized_reasoning: str | None = Field(
+        default=None,
+        max_length=20000,
+        description=(
+            "Optional normalized reasoning used by the Sprint 10 "
+            "diagnosis pipeline."
+        ),
+    )
+
     speech_transcript: str | None = Field(
         default=None,
         max_length=20000,
+    )
+
+    speech_audio_reference: str | None = Field(
+        default=None,
+        max_length=2000,
+        description=(
+            "Optional opaque reference to temporarily retained speech audio."
+        ),
+    )
+
+    speech_audio_retained: bool = Field(
+        default=False,
+        description=(
+            "Whether raw speech audio is retained with explicit consent."
+        ),
+    )
+
+    speech_processing_status: str = Field(
+        default="not_provided",
+        min_length=1,
+        max_length=30,
+    )
+
+    input_modality: str = Field(
+        default="text",
+        min_length=1,
+        max_length=30,
+    )
+
+    input_language: str = Field(
+        default="english",
+        min_length=1,
+        max_length=30,
+    )
+
+    detected_language: str | None = Field(
+        default=None,
+        max_length=30,
     )
 
     selected_language: str = Field(
@@ -495,58 +546,189 @@ class RetryAttemptCreate(BaseModel):
     def normalize_retry_submission(
         self,
     ) -> "RetryAttemptCreate":
-        self.written_reasoning = (
-            self.written_reasoning.strip()
-        )
-
-        self.selected_language = (
-            self.selected_language.strip().lower()
-        )
+        self.written_reasoning = self.written_reasoning.strip()
 
         if not self.written_reasoning:
             raise ValueError(
                 "written_reasoning must not be blank."
             )
 
+        programming_language_aliases = {
+            "py": "python",
+            "python3": "python",
+            "python 3": "python",
+            "c language": "c",
+            "text / no code": "text",
+            "text/no code": "text",
+            "no code": "text",
+        }
+
+        normalized_programming_language = (
+            self.selected_language.strip().lower()
+        )
+
+        self.selected_language = programming_language_aliases.get(
+            normalized_programming_language,
+            normalized_programming_language,
+        )
+
         if not self.selected_language:
             raise ValueError(
                 "selected_language must not be blank."
             )
 
-        if self.final_answer is not None:
-            normalized_final_answer = (
-                self.final_answer.strip()
+        natural_language_aliases = {
+            "en": "english",
+            "eng": "english",
+            "te": "telugu",
+            "tel": "telugu",
+            "hi": "hindi",
+            "hin": "hindi",
+        }
+
+        normalized_input_language = (
+            self.input_language.strip().lower()
+        )
+
+        self.input_language = natural_language_aliases.get(
+            normalized_input_language,
+            normalized_input_language,
+        )
+
+        if not self.input_language:
+            raise ValueError(
+                "input_language must not be blank."
             )
 
-            self.final_answer = (
-                normalized_final_answer
+        if self.detected_language is not None:
+            detected_language = self.detected_language.strip().lower()
+            self.detected_language = (
+                natural_language_aliases.get(
+                    detected_language,
+                    detected_language,
+                )
                 or None
             )
 
-        if self.source_code is not None:
-            normalized_source_code = (
-                self.source_code.strip()
+        optional_text_fields = (
+            "final_answer",
+            "normalized_reasoning",
+            "source_code",
+            "speech_transcript",
+            "speech_audio_reference",
+        )
+
+        for field_name in optional_text_fields:
+            value = getattr(self, field_name)
+
+            if value is None:
+                continue
+
+            normalized_value = value.strip()
+
+            setattr(
+                self,
+                field_name,
+                normalized_value or None,
             )
 
-            self.source_code = (
-                normalized_source_code
-                or None
+        self.speech_processing_status = (
+            self.speech_processing_status.strip().lower()
+        )
+
+        valid_speech_statuses = {
+            "not_provided",
+            "pending",
+            "processing",
+            "completed",
+            "failed",
+        }
+
+        if (
+            self.speech_processing_status
+            not in valid_speech_statuses
+        ):
+            raise ValueError(
+                "speech_processing_status must be one of: "
+                "not_provided, pending, processing, completed, failed."
+            )
+
+        normalized_modality = (
+            self.input_modality.strip().lower().replace("-", "_")
+        )
+
+        modality_aliases = {
+            "text+code": "text_code",
+            "text+speech": "text_speech",
+            "code+speech": "code_speech",
+            "text+code+speech": "text_code_speech",
+        }
+
+        self.input_modality = modality_aliases.get(
+            normalized_modality,
+            normalized_modality,
+        )
+
+        valid_modalities = {
+            "text",
+            "code",
+            "speech",
+            "text_code",
+            "text_speech",
+            "code_speech",
+            "text_code_speech",
+        }
+
+        if self.input_modality not in valid_modalities:
+            raise ValueError(
+                "input_modality must be one of: "
+                "text, code, speech, text_code, text_speech, "
+                "code_speech, text_code_speech."
             )
 
         if (
-            self.speech_transcript
-            is not None
+            self.speech_audio_retained
+            and self.speech_audio_reference is None
         ):
-            normalized_transcript = (
-                self.speech_transcript.strip()
+            raise ValueError(
+                "speech_audio_reference is required when "
+                "speech_audio_retained is true."
             )
 
-            self.speech_transcript = (
-                normalized_transcript
-                or None
+        speech_present = (
+            self.speech_transcript is not None
+            or self.speech_audio_reference is not None
+        )
+
+        modality_has_speech = self.input_modality in {
+            "speech",
+            "text_speech",
+            "code_speech",
+            "text_code_speech",
+        }
+
+        if speech_present and not modality_has_speech:
+            raise ValueError(
+                "input_modality must include speech when speech "
+                "input metadata is provided."
+            )
+
+        if (
+            not speech_present
+            and self.speech_processing_status
+            in {
+                "pending",
+                "processing",
+                "completed",
+            }
+        ):
+            raise ValueError(
+                "Active or completed speech processing requires "
+                "speech input."
             )
 
         return self
+
 
 
 class RetryAttemptResponse(BaseModel):
@@ -570,6 +752,34 @@ class RetryAttemptResponse(BaseModel):
         ge=1,
     )
 
+    normalized_reasoning: str | None = None
+    speech_transcript: str | None = None
+    speech_audio_reference: str | None = None
+    speech_audio_retained: bool = False
+
+    speech_processing_status: str = Field(
+        default="not_provided",
+        min_length=1,
+        max_length=30,
+    )
+
+    input_modality: str = Field(
+        default="text",
+        min_length=1,
+        max_length=30,
+    )
+
+    input_language: str = Field(
+        default="english",
+        min_length=1,
+        max_length=30,
+    )
+
+    detected_language: str | None = Field(
+        default=None,
+        max_length=30,
+    )
+
     selected_language: str = Field(
         ...,
         min_length=1,
@@ -577,11 +787,12 @@ class RetryAttemptResponse(BaseModel):
     )
 
     response_time_seconds: int | None = Field(
-            default=None,
-            ge=0,
-        )
+        default=None,
+        ge=0,
+    )
 
     created_at: datetime
+    updated_at: datetime
 
 
 class MisconceptionEvolutionResponse(BaseModel):
@@ -691,6 +902,12 @@ class LearningHistoryItem(BaseModel):
     diagnostic_question_answered: bool = False
 
     evolution_state: MisconceptionEvolutionState | None = None
+
+    input_modality: str = "text"
+    input_language: str = "english"
+    detected_language: str | None = None
+    speech_processing_status: str = "not_provided"
+    selected_language: str | None = None
 
     created_at: datetime
 
