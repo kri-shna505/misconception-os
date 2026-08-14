@@ -1185,3 +1185,329 @@ int sum(int n) {
         for item in response.evidence
     )
     assert db.commit_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Sprint 11 hybrid diagnosis integration and safe fallback
+# ---------------------------------------------------------------------------
+
+
+def _configure_sprint11_confident_rule_flow(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    fixed_created_at: datetime,
+) -> tuple[
+    FakeDatabase,
+    SimpleNamespace,
+    SimpleNamespace,
+    SimpleNamespace,
+]:
+    db = FakeDatabase()
+    problem = make_problem("P4")
+    attempt = make_attempt(problem_id=problem.id)
+    misconception = make_misconception("M4")
+
+    rule_result = make_rule_result(
+        state=DiagnosisState.CONFIDENT,
+        misconception_code="M4",
+        confidence=0.92,
+        next_action=DiagnosisNextAction.SHOW_HINT,
+        evidence=[make_evidence("Explicit M4 evidence.")],
+    )
+
+    configure_new_diagnosis_flow(
+        monkeypatch,
+        attempt=attempt,
+        problem=problem,
+        rule_result=rule_result,
+        fixed_created_at=fixed_created_at,
+    )
+    monkeypatch.setattr(
+        diagnosis_service,
+        "_get_misconception_by_code_or_404",
+        lambda db, code: misconception,
+    )
+
+    return db, attempt, problem, misconception
+
+
+def _diagnosis_insert_parameters(
+    db: FakeDatabase,
+) -> dict:
+    parameters = next(
+        parameters
+        for statement, parameters in db.executed
+        if "INSERT INTO diagnoses" in statement
+    )
+
+    assert parameters is not None
+    return parameters
+
+
+def _enable_test_ml_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        diagnosis_service.settings,
+        "ML_DIAGNOSIS_ENABLED",
+        True,
+    )
+    monkeypatch.setattr(
+        diagnosis_service.settings,
+        "ML_MODEL_PATH",
+        "test-baseline.joblib",
+    )
+    monkeypatch.setattr(
+        diagnosis_service.settings,
+        "ML_MODEL_CACHE_ENABLED",
+        False,
+    )
+
+
+def test_ml_disabled_never_checks_artifact_and_persists_rule_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    fixed_created_at: datetime,
+) -> None:
+    db, attempt, _, misconception = (
+        _configure_sprint11_confident_rule_flow(
+            monkeypatch,
+            fixed_created_at=fixed_created_at,
+        )
+    )
+
+    monkeypatch.setattr(
+        diagnosis_service.settings,
+        "ML_DIAGNOSIS_ENABLED",
+        False,
+    )
+
+    def fail_if_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("ML availability must not be checked.")
+
+    monkeypatch.setattr(
+        diagnosis_service,
+        "ml_diagnosis_available",
+        fail_if_called,
+    )
+
+    response = diagnosis_service.create_diagnosis_from_attempt(
+        db=db,
+        attempt_id=attempt.id,
+    )
+
+    diagnosis_insert = _diagnosis_insert_parameters(db)
+
+    assert response.model_version == "rule-v1.9"
+    assert diagnosis_insert["prediction_source"] == "rule"
+    assert diagnosis_insert["rule_score"] == 0.92
+    assert diagnosis_insert["ml_score"] is None
+    assert diagnosis_insert["hybrid_score"] is None
+    assert diagnosis_insert["feature_version"] is None
+    assert diagnosis_insert["calibration_version"] is None
+    assert (
+        diagnosis_insert["primary_misconception_id"]
+        == misconception.id
+    )
+
+
+def test_missing_ml_artifact_falls_back_to_rule_only(
+    monkeypatch: pytest.MonkeyPatch,
+    fixed_created_at: datetime,
+) -> None:
+    db, attempt, _, _ = _configure_sprint11_confident_rule_flow(
+        monkeypatch,
+        fixed_created_at=fixed_created_at,
+    )
+    _enable_test_ml_settings(monkeypatch)
+
+    monkeypatch.setattr(
+        diagnosis_service,
+        "ml_diagnosis_available",
+        lambda model_path: SimpleNamespace(available=False),
+    )
+
+    def fail_if_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("Inference must not run without an artifact.")
+
+    monkeypatch.setattr(
+        diagnosis_service,
+        "diagnose_with_ml_from_mapping",
+        fail_if_called,
+    )
+
+    response = diagnosis_service.create_diagnosis_from_attempt(
+        db=db,
+        attempt_id=attempt.id,
+    )
+
+    diagnosis_insert = _diagnosis_insert_parameters(db)
+
+    assert response.model_version == "rule-v1.9"
+    assert diagnosis_insert["prediction_source"] == "rule"
+    assert diagnosis_insert["ml_score"] is None
+    assert diagnosis_insert["hybrid_score"] is None
+    assert db.commit_count == 1
+
+
+def test_ml_availability_exception_falls_back_to_rule_only(
+    monkeypatch: pytest.MonkeyPatch,
+    fixed_created_at: datetime,
+) -> None:
+    db, attempt, _, _ = _configure_sprint11_confident_rule_flow(
+        monkeypatch,
+        fixed_created_at=fixed_created_at,
+    )
+    _enable_test_ml_settings(monkeypatch)
+
+    def raise_availability_error(model_path: object) -> None:
+        raise RuntimeError("Simulated availability failure.")
+
+    monkeypatch.setattr(
+        diagnosis_service,
+        "ml_diagnosis_available",
+        raise_availability_error,
+    )
+
+    response = diagnosis_service.create_diagnosis_from_attempt(
+        db=db,
+        attempt_id=attempt.id,
+    )
+
+    diagnosis_insert = _diagnosis_insert_parameters(db)
+
+    assert response.model_version == "rule-v1.9"
+    assert diagnosis_insert["prediction_source"] == "rule"
+    assert db.commit_count == 1
+    assert db.rollback_count == 0
+
+
+def test_ml_inference_exception_falls_back_to_rule_only(
+    monkeypatch: pytest.MonkeyPatch,
+    fixed_created_at: datetime,
+) -> None:
+    db, attempt, _, _ = _configure_sprint11_confident_rule_flow(
+        monkeypatch,
+        fixed_created_at=fixed_created_at,
+    )
+    _enable_test_ml_settings(monkeypatch)
+
+    monkeypatch.setattr(
+        diagnosis_service,
+        "ml_diagnosis_available",
+        lambda model_path: SimpleNamespace(available=True),
+    )
+
+    def raise_inference_error(**kwargs: object) -> None:
+        raise RuntimeError("Simulated inference failure.")
+
+    monkeypatch.setattr(
+        diagnosis_service,
+        "diagnose_with_ml_from_mapping",
+        raise_inference_error,
+    )
+
+    response = diagnosis_service.create_diagnosis_from_attempt(
+        db=db,
+        attempt_id=attempt.id,
+    )
+
+    diagnosis_insert = _diagnosis_insert_parameters(db)
+
+    assert response.model_version == "rule-v1.9"
+    assert diagnosis_insert["prediction_source"] == "rule"
+    assert diagnosis_insert["rule_score"] == 0.92
+    assert diagnosis_insert["ml_score"] is None
+    assert diagnosis_insert["hybrid_score"] is None
+    assert db.commit_count == 1
+    assert db.rollback_count == 0
+
+
+def test_successful_ml_fusion_persists_hybrid_result_and_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+    fixed_created_at: datetime,
+) -> None:
+    db, attempt, problem, misconception = (
+        _configure_sprint11_confident_rule_flow(
+            monkeypatch,
+            fixed_created_at=fixed_created_at,
+        )
+    )
+    _enable_test_ml_settings(monkeypatch)
+
+    monkeypatch.setattr(
+        diagnosis_service,
+        "ml_diagnosis_available",
+        lambda model_path: SimpleNamespace(available=True),
+    )
+
+    hybrid_sentinel = object()
+    captured_call: dict[str, object] = {}
+
+    def fake_diagnose_with_ml_from_mapping(
+        **kwargs: object,
+    ) -> object:
+        captured_call.update(kwargs)
+        return hybrid_sentinel
+
+    monkeypatch.setattr(
+        diagnosis_service,
+        "diagnose_with_ml_from_mapping",
+        fake_diagnose_with_ml_from_mapping,
+    )
+    monkeypatch.setattr(
+        diagnosis_service,
+        "diagnosis_model_fields",
+        lambda result: {
+            "state": "possible",
+            "primary_misconception_id": str(misconception.id),
+            "confidence": 0.68,
+            "model_version": "hybrid-rule-v1.9-baseline-v1",
+            "decision_reason": "Rule and ML fusion produced a possible result.",
+            "next_action": "ask_diagnostic_question",
+            "rule_score": 0.92,
+            "ml_score": 0.58,
+            "hybrid_score": 0.68,
+            "prediction_source": "hybrid",
+            "feature_version": "feature-v1",
+            "calibration_version": None,
+        },
+    )
+
+    response = diagnosis_service.create_diagnosis_from_attempt(
+        db=db,
+        attempt_id=attempt.id,
+    )
+
+    diagnosis_insert = _diagnosis_insert_parameters(db)
+    attempt_payload = captured_call["attempt"]
+    rule_mapping = captured_call["rule_result"]
+
+    assert isinstance(attempt_payload, dict)
+    assert attempt_payload["attempt_id"] == str(attempt.id)
+    assert attempt_payload["problem_id"] == str(problem.id)
+    assert attempt_payload["problem_code"] == "P4"
+    assert isinstance(rule_mapping, dict)
+    assert rule_mapping["state"] == "confident"
+    assert rule_mapping["confidence"] == 0.92
+    assert (
+        rule_mapping["primary_misconception_id"]
+        == str(misconception.id)
+    )
+    assert captured_call["model_path"] == "test-baseline.joblib"
+    assert captured_call["use_model_cache"] is False
+
+    assert response.state == DiagnosisState.POSSIBLE
+    assert response.confidence == 0.68
+    assert (
+        response.next_action
+        == DiagnosisNextAction.ASK_DIAGNOSTIC_QUESTION
+    )
+    assert response.model_version == "hybrid-rule-v1.9-baseline-v1"
+    assert diagnosis_insert["prediction_source"] == "hybrid"
+    assert diagnosis_insert["rule_score"] == 0.92
+    assert diagnosis_insert["ml_score"] == 0.58
+    assert diagnosis_insert["hybrid_score"] == 0.68
+    assert diagnosis_insert["feature_version"] == "feature-v1"
+    assert diagnosis_insert["calibration_version"] is None
+    assert db.commit_count == 1
+    assert db.rollback_count == 0
