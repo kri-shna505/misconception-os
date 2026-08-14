@@ -1,6 +1,33 @@
+# Python virtual environments
 .venv/
+venv/
+backend/.venv/
+backend/venv/
+
+# Python generated files
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Frontend generated files
 node_modules/
 dist/
+coverage/
+
+# Local configuration and secrets
 .env
+.env.*
+!.env.example
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local logs
+*.log
