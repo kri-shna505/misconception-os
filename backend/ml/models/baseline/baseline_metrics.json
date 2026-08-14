@@ -1,0 +1,85 @@
+{
+  "model_version": "baseline-logreg-v1.1",
+  "dataset_path": "ml\\data\\exports\\smoke_training_dataset.csv",
+  "total_rows": 24,
+  "train_rows": 18,
+  "test_rows": 6,
+  "classes": [
+    "confident",
+    "insufficient",
+    "no_misconception",
+    "possible"
+  ],
+  "accuracy": 1.0,
+  "macro_precision": 1.0,
+  "macro_recall": 1.0,
+  "macro_f1": 1.0,
+  "classification_report": {
+    "confident": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 2.0
+    },
+    "insufficient": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 1.0
+    },
+    "no_misconception": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 2.0
+    },
+    "possible": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 1.0
+    },
+    "accuracy": 1.0,
+    "macro avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 6.0
+    },
+    "weighted avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 6.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      2,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      2,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      1
+    ]
+  ],
+  "model_path": "C:\\misconceptionos\\backend\\ml\\models\\baseline\\baseline_logistic_regression.joblib",
+  "metrics_path": "C:\\misconceptionos\\backend\\ml\\models\\baseline\\baseline_metrics.json",
+  "serious_training_ready": false
+}

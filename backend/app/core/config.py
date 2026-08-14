@@ -23,13 +23,30 @@ class Settings(BaseSettings):
     )
 
     JWT_SECRET_KEY: str = Field(
-        default="-xSP3-sFZ0OvtwaNxS2X3i9ZsVdhnWi715VIiIgf62FfiV8ZIc5v5p_CKJEudTb6",
+        default=(
+            "-xSP3-sFZ0OvtwaNxS2X3i9ZsVdhnWi715VIiIgf62FfiV8ZIc5v5p_CKJEudTb6"
+        ),
         min_length=32,
     )
 
     JWT_ALGORITHM: str = "HS256"
 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    # Sprint 11 hybrid diagnosis configuration.
+    #
+    # ML is intentionally disabled by default. This preserves the existing
+    # deterministic rule-only behavior unless the deployment explicitly opts
+    # into hybrid inference.
+    ML_DIAGNOSIS_ENABLED: bool = False
+
+    # Leave this unset to use the default artifact path configured by the
+    # inference module. A deployment may override it through the backend .env.
+    ML_MODEL_PATH: str | None = None
+
+    # Reuse the deserialized model between requests in normal application
+    # operation. Tests may override this setting when isolation is required.
+    ML_MODEL_CACHE_ENABLED: bool = True
 
     @field_validator("DATABASE_URL")
     @classmethod
@@ -105,6 +122,22 @@ class Settings(BaseSettings):
             )
 
         return value
+
+    @field_validator(
+        "ML_MODEL_PATH",
+        mode="before",
+    )
+    @classmethod
+    def normalize_ml_model_path(
+        cls,
+        value: object,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        normalized_value = str(value).strip()
+
+        return normalized_value or None
 
 
 settings = Settings()

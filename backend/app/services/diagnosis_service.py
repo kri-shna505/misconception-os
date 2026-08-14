@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from types import SimpleNamespace
 from typing import Any
@@ -10,6 +11,13 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.services.ml_diagnosis_service import (
+    diagnose_with_ml_from_mapping,
+    diagnosis_model_fields,
+    ml_diagnosis_available,
+    rule_only_diagnosis_model_fields,
+)
 from app.schemas.diagnosis import (
     DiagnosisAlternativeResponse,
     DiagnosisEvidenceResponse,
@@ -23,6 +31,8 @@ from app.services.rule_detector import detect_misconception
 
 
 MODEL_VERSION = "rule-v1.9"
+
+logger = logging.getLogger(__name__)
 
 
 # Diagnosis must remain inside the misconception taxonomy configured for the
@@ -77,17 +87,20 @@ def create_diagnosis_from_attempt(
 
     attempt = _get_attempt_or_404(db, attempt_id)
 
-    existing_diagnosis = _get_existing_diagnosis_for_attempt(
-        db=db,
-        attempt_id=attempt.id,
-        model_version=MODEL_VERSION,
-    )
-
-    if existing_diagnosis is not None:
-        return _build_existing_diagnosis_response(
+    # Preserve the original fast/idempotent rule-only path when ML is off.
+    # When ML is enabled, the final model version is known only after fusion.
+    if not settings.ML_DIAGNOSIS_ENABLED:
+        existing_diagnosis = _get_existing_diagnosis_for_attempt(
             db=db,
-            diagnosis_id=existing_diagnosis.id,
+            attempt_id=attempt.id,
+            model_version=MODEL_VERSION,
         )
+
+        if existing_diagnosis is not None:
+            return _build_existing_diagnosis_response(
+                db=db,
+                diagnosis_id=existing_diagnosis.id,
+            )
 
     problem = _get_problem_or_404(db, attempt.problem_id)
     allowed_codes = _get_allowed_misconception_codes(problem)
@@ -193,6 +206,53 @@ def create_diagnosis_from_attempt(
         )
         primary_misconception_id = primary_misconception.id
 
+    diagnosis_fields = _resolve_initial_diagnosis_model_fields(
+        attempt=attempt,
+        problem=problem,
+        state=final_state,
+        confidence=final_confidence,
+        primary_misconception_id=primary_misconception_id,
+        decision_reason=final_decision_reason,
+        next_action=final_next_action,
+    )
+
+    final_state = DiagnosisState(diagnosis_fields["state"])
+    final_confidence = float(diagnosis_fields["confidence"])
+    final_decision_reason = diagnosis_fields["decision_reason"]
+    final_next_action = DiagnosisNextAction(
+        diagnosis_fields["next_action"]
+    )
+
+    resolved_primary_id = diagnosis_fields["primary_misconception_id"]
+    if resolved_primary_id is None:
+        primary_misconception = None
+        primary_misconception_id = None
+        final_misconception_code = None
+        final_alternative_codes = []
+    else:
+        primary_misconception_id = UUID(str(resolved_primary_id))
+
+    _validate_final_diagnosis_contract(
+        state=final_state,
+        misconception_code=final_misconception_code,
+        confidence=final_confidence,
+        evidence=final_evidence,
+    )
+
+    selected_model_version = str(diagnosis_fields["model_version"])
+
+    existing_diagnosis = _get_existing_diagnosis_for_attempt(
+        db=db,
+        attempt_id=attempt.id,
+        model_version=selected_model_version,
+    )
+
+    if existing_diagnosis is not None:
+        return _build_existing_diagnosis_response(
+            db=db,
+            diagnosis_id=existing_diagnosis.id,
+        )
+
     diagnosis_id = uuid4()
 
     db.execute(
@@ -209,6 +269,11 @@ def create_diagnosis_from_attempt(
                 next_action,
                 rule_score,
                 llm_score,
+                ml_score,
+                hybrid_score,
+                prediction_source,
+                feature_version,
+                calibration_version,
                 created_at,
                 updated_at
             )
@@ -223,6 +288,11 @@ def create_diagnosis_from_attempt(
                 :next_action,
                 :rule_score,
                 :llm_score,
+                :ml_score,
+                :hybrid_score,
+                :prediction_source,
+                :feature_version,
+                :calibration_version,
                 NOW(),
                 NOW()
             )
@@ -234,11 +304,16 @@ def create_diagnosis_from_attempt(
             "state": _state_value(final_state),
             "primary_misconception_id": primary_misconception_id,
             "confidence": final_confidence,
-            "model_version": MODEL_VERSION,
+            "model_version": selected_model_version,
             "decision_reason": final_decision_reason,
             "next_action": _next_action_value(final_next_action),
-            "rule_score": final_confidence,
+            "rule_score": diagnosis_fields["rule_score"],
             "llm_score": None,
+            "ml_score": diagnosis_fields["ml_score"],
+            "hybrid_score": diagnosis_fields["hybrid_score"],
+            "prediction_source": diagnosis_fields["prediction_source"],
+            "feature_version": diagnosis_fields["feature_version"],
+            "calibration_version": diagnosis_fields["calibration_version"],
         },
     )
 
@@ -372,11 +447,106 @@ def create_diagnosis_from_attempt(
         ),
         evidence=evidence_responses,
         alternatives=alternative_responses,
-        model_version=MODEL_VERSION,
+        model_version=selected_model_version,
         decision_reason=final_decision_reason,
         next_action=final_next_action,
         created_at=created_at,
     )
+
+
+def _resolve_initial_diagnosis_model_fields(
+    *,
+    attempt: SimpleNamespace,
+    problem: SimpleNamespace,
+    state: DiagnosisState | str,
+    confidence: float,
+    primary_misconception_id: UUID | None,
+    decision_reason: str | None,
+    next_action: DiagnosisNextAction | str,
+) -> dict[str, Any]:
+    """
+    Select hybrid diagnosis fields when ML is usable.
+
+    Every ML-specific failure is isolated here and falls back to the exact
+    deterministic rule result. Database errors are deliberately not handled
+    here; persistence failures must continue to fail and roll back normally.
+    """
+
+    rule_fields = rule_only_diagnosis_model_fields(
+        state=_state_value(state),
+        confidence=confidence,
+        primary_misconception_id=(
+            str(primary_misconception_id)
+            if primary_misconception_id is not None
+            else None
+        ),
+        decision_reason=decision_reason,
+        rule_score=confidence,
+        model_version=MODEL_VERSION,
+    )
+    # Preserve the existing rule detector's intervention choice exactly.
+    rule_fields["next_action"] = _next_action_value(next_action)
+
+    if not settings.ML_DIAGNOSIS_ENABLED:
+        return rule_fields
+
+    model_path = settings.ML_MODEL_PATH
+
+    try:
+        availability = ml_diagnosis_available(model_path)
+    except Exception:
+        logger.warning(
+            "Unable to check ML diagnosis availability; using rule-only diagnosis.",
+            exc_info=True,
+        )
+        return rule_fields
+
+    if not availability.available:
+        logger.info(
+            "ML diagnosis artifact is unavailable; using rule-only diagnosis."
+        )
+        return rule_fields
+
+    attempt_payload = dict(vars(attempt))
+    attempt_payload.update(
+        {
+            "attempt_id": str(attempt.id),
+            "problem_id": str(problem.id),
+            "problem_code": problem.code,
+            "problem_title": problem.title,
+            "problem_topic": problem.topic,
+            "problem_difficulty": problem.difficulty,
+            "expected_language": problem.expected_language,
+        }
+    )
+
+    rule_mapping = {
+        "state": _state_value(state),
+        "confidence": float(confidence),
+        "primary_misconception_id": (
+            str(primary_misconception_id)
+            if primary_misconception_id is not None
+            else None
+        ),
+        "rule_score": float(confidence),
+        "model_version": MODEL_VERSION,
+        "decision_reason": decision_reason,
+    }
+
+    try:
+        hybrid_result = diagnose_with_ml_from_mapping(
+            attempt=attempt_payload,
+            rule_result=rule_mapping,
+            model_path=model_path,
+            use_model_cache=settings.ML_MODEL_CACHE_ENABLED,
+        )
+        return diagnosis_model_fields(hybrid_result)
+    except Exception:
+        logger.warning(
+            "ML diagnosis failed; using rule-only diagnosis.",
+            exc_info=True,
+        )
+        return rule_fields
 
 
 def create_followup_diagnosis_from_response(

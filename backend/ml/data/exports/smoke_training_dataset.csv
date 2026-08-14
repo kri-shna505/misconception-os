@@ -1,0 +1,61 @@
+attempt_id,problem_id,written_reasoning,normalized_reasoning,source_code,speech_transcript,selected_language,input_language,input_modality,response_time_seconds,rule_state,rule_misconception_id,rule_confidence,rule_score,target_state,target_misconception_id,synthetic,dataset_version
+smoke-attempt-001,smoke-problem-p1,I will use binary search directly because checking the middle element lets me discard half of the array.,,"def search(arr, target):
+    left = 0
+    right = len(arr) - 1
+    while left <= right:
+        mid = (left + right) // 2
+        if arr[mid] == target:
+            return mid
+        if arr[mid] < target:
+            left = mid + 1
+        else:
+            right = mid - 1
+    return -1",,python,english,text + code,42,confident,M1,0.92,0.95,confident,M1,True,smoke-v1.0
+smoke-attempt-002,smoke-problem-p1,"Binary search is O(log n), so I will use it on this array.",,"while low <= high:
+    mid = (low + high) // 2",The array does not need sorting because binary search still compares with the middle value.,python,english,text + code + speech,51,confident,M1,0.92,0.95,confident,M1,True,smoke-v1.0
+smoke-attempt-003,smoke-problem-p1,ఈ array sorted కాకపోయినా binary search use చేయొచ్చు. Middle element చూసి half discard చేస్తాను.,,"mid = (left + right) // 2
+if arr[mid] < target:
+    left = mid + 1",,python,telugu,text + code,47,confident,M1,0.92,0.95,confident,M1,True,smoke-v1.0
+smoke-attempt-004,smoke-problem-p1,I will repeatedly halve the search interval until I find 7.,,"if arr[mid] == target:
+    return mid
+elif arr[mid] < target:
+    left = mid + 1",Sorted order is not necessary for this approach.,python,english,text + code + speech,39,confident,M1,0.92,0.95,confident,M1,True,smoke-v1.0
+smoke-attempt-005,smoke-problem-p1,Binary search should work because every comparison removes half of the remaining values.,,"low = 0
+high = len(arr) - 1
+while low <= high:
+    mid = (low + high) // 2",,python,english,text + code,36,confident,M1,0.92,0.95,confident,M1,True,smoke-v1.0
+smoke-attempt-006,smoke-problem-p1,Array order గురించి check చేయాల్సిన అవసరం లేదు. Binary search faster.,,"mid = (low + high) // 2
+high = mid - 1",I can discard one half directly.,python,telugu,text + code + speech,44,confident,M1,0.92,0.95,confident,M1,True,smoke-v1.0
+smoke-attempt-007,smoke-problem-p1,I think binary search may work because it is faster.,,,,python,english,text,29,possible,M1,0.63,0.65,possible,M1,True,smoke-v1.0
+smoke-attempt-008,smoke-problem-p1,I would probably compare with the middle element.,,,I am not sure whether the array needs to be sorted.,python,english,text + speech,31,possible,M1,0.63,0.65,possible,M1,True,smoke-v1.0
+smoke-attempt-009,smoke-problem-p1,"Binary search use చేయాలని అనుకుంటున్నాను, but sorted condition sure కాదు.",,,,python,telugu,text,34,possible,M1,0.63,0.65,possible,M1,True,smoke-v1.0
+smoke-attempt-010,smoke-problem-p1,Maybe I can divide the array into halves repeatedly.,,mid = len(arr) // 2,,python,english,text + code,27,possible,M1,0.63,0.65,possible,M1,True,smoke-v1.0
+smoke-attempt-011,smoke-problem-p1,"I expect O(log n) search, but I am not fully sure about the precondition.",,,I think the middle element helps reduce the search space.,python,english,text + speech,35,possible,M1,0.63,0.65,possible,M1,True,smoke-v1.0
+smoke-attempt-012,smoke-problem-p1,Middle element compare చేస్తే half remove చేయొచ్చేమో.,,,,python,telugu,text,33,possible,M1,0.63,0.65,possible,M1,True,smoke-v1.0
+smoke-attempt-013,smoke-problem-p1,I don't know.,,,,python,english,text,8,insufficient,,0.22,0.18,insufficient,,True,smoke-v1.0
+smoke-attempt-014,smoke-problem-p1,Not sure.,,,,python,english,text,11,insufficient,,0.22,0.18,insufficient,,True,smoke-v1.0
+smoke-attempt-015,smoke-problem-p1,తెలియదు.,,,,python,telugu,text,9,insufficient,,0.22,0.18,insufficient,,True,smoke-v1.0
+smoke-attempt-016,smoke-problem-p1,Maybe search somehow.,,,,python,english,text,10,insufficient,,0.22,0.18,insufficient,,True,smoke-v1.0
+smoke-attempt-017,smoke-problem-p1,,,,I am not sure what approach to use.,python,english,speech,13,insufficient,,0.22,0.18,insufficient,,True,smoke-v1.0
+smoke-attempt-018,smoke-problem-p1,ఏ algorithm use చేయాలో తెలియదు.,,,,python,telugu,text,12,insufficient,,0.22,0.18,insufficient,,True,smoke-v1.0
+smoke-attempt-019,smoke-problem-p1,"Binary search requires sorted input. This array is unsorted, so I will use linear search.",,"def search(arr, target):
+    for index, value in enumerate(arr):
+        if value == target:
+            return index
+    return -1",,python,english,text + code,38,no_misconception,,0.95,0.95,no_misconception,,True,smoke-v1.0
+smoke-attempt-020,smoke-problem-p1,The input is not sorted. I should scan each element instead of using binary search directly.,,"for i in range(len(arr)):
+    if arr[i] == target:
+        return i",Binary search depends on sorted order.,python,english,text + code + speech,40,no_misconception,,0.95,0.95,no_misconception,,True,smoke-v1.0
+smoke-attempt-021,smoke-problem-p1,ఈ array sorted కాదు. కాబట్టి direct binary search correct కాదు. Linear search చేస్తాను.,,"for index, value in enumerate(arr):
+    if value == target:
+        return index",,python,telugu,text + code,41,no_misconception,,0.95,0.95,no_misconception,,True,smoke-v1.0
+smoke-attempt-022,smoke-problem-p1,I can either sort the array first or use a search algorithm that does not require ordering. I will use linear search.,,"for value in arr:
+    if value == target:
+        return True",,python,english,text + code,37,no_misconception,,0.95,0.95,no_misconception,,True,smoke-v1.0
+smoke-attempt-023,smoke-problem-p1,Binary search correct ga work అవ్వాలంటే array sorted ఉండాలి. ఈ input sorted కాదు.,,"for i, item in enumerate(arr):
+    if item == target:
+        return i",So I will use linear search.,python,telugu,text + code + speech,43,no_misconception,,0.95,0.95,no_misconception,,True,smoke-v1.0
+smoke-attempt-024,smoke-problem-p1,"The sorted-input precondition is missing, so binary search is inappropriate here.",,"return next(
+    (i for i, v in enumerate(arr) if v == target),
+    -1,
+)",,python,english,text + code,36,no_misconception,,0.95,0.95,no_misconception,,True,smoke-v1.0
